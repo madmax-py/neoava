@@ -1,0 +1,9 @@
+# credenciais — nunca commitar
+.env
+.env.*
+!.env.example
+
+node_modules/
+dist/
+.cache/
+*.log

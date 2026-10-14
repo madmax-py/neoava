@@ -1,0 +1,26 @@
+{
+  "name": "neoava",
+  "version": "0.1.0",
+  "description": "Front-end pessoal (somente leitura) para o AVA UniEvangélica via Web Services do Moodle",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "login": "tsx scripts/login.ts",
+    "dev": "vite",
+    "dev:rede": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "site-info": "tsx scripts/site-info.ts",
+    "resumo": "tsx scripts/resumo.ts",
+    "inspecionar": "tsx scripts/inspecionar-notas.ts"
+  },
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4"
+  },
+  "private": true
+}
