@@ -23,12 +23,19 @@ export const READ_ONLY_FUNCTIONS = new Set([
   "core_user_get_users_by_field",
   "core_calendar_get_calendar_events",
   "core_badges_get_user_badges",
+  // Questionários (só leitura): regras de acesso, tipos de questão, questões de uma tentativa e revisão.
+  // Nenhuma delas inicia, salva ou envia tentativa (isso seria start_/save_/process_attempt).
+  "mod_quiz_get_quiz_access_information",
+  "mod_quiz_get_attempt_access_information",
+  "mod_quiz_get_quiz_required_qtypes",
+  "mod_quiz_get_attempt_data",
+  "mod_quiz_get_attempt_review",
 ]);
 
 /** Padrões que indicam escrita/registro de ação. Bloqueados mesmo que alguém os adicione à lista acima. */
 const WRITE_PATTERN = /(_view_|_view$|save_|submit_|add_|_update_|_delete_|_create_|_set_|mark_|_start_|_process_)/;
 
-/** Única regra de "somente leitura", usada pelo cliente e pelo backend. */
+/** Única regra de "somente leitura" do projeto. */
 export function isReadOnlyFunction(wsfunction: string): boolean {
   return READ_ONLY_FUNCTIONS.has(wsfunction) && !WRITE_PATTERN.test(wsfunction);
 }
@@ -56,8 +63,8 @@ export interface Cache {
 }
 
 /**
- * Como a chamada chega ao Moodle. Padrão: direto no REST do AVA com o token (terminal e backend).
- * No navegador, o transporte é o backend local, que guarda o token — o token nunca fica na página.
+ * Como a chamada chega ao Moodle. Padrão: direto no REST do AVA com o token
+ * (no terminal, o token vem do .env; no navegador, do localStorage).
  */
 export interface Transport {
   call(wsfunction: string, body: URLSearchParams): Promise<unknown>;
@@ -201,7 +208,7 @@ export function checkMoodleResponse(data: unknown, wsfunction: string): unknown 
   return data;
 }
 
-/** Transporte direto para o REST do AVA (usado no terminal e no backend local). */
+/** Transporte direto para o REST do AVA (terminal e navegador). */
 export function directTransport(baseUrl: string, token: string): Transport {
   const base = baseUrl.replace(/\/+$/, "");
   return {

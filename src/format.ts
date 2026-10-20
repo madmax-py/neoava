@@ -32,7 +32,9 @@ export function fmtRelative(ts: number, now = Date.now() / 1000): string {
 /** Remove HTML (descrições do Moodle vêm em HTML). */
 export function stripHtml(html: string): string {
   return html
-    .replace(/<[^>]*>/g, " ")
+    // Quebras e fins de bloco viram espaço; tags inline (<b>, <span>…) somem sem deixar espaço.
+    .replace(/<(br|hr)\b[^>]*>|<\/(p|div|li|h\d|tr|td|th|dt|dd|blockquote|pre|table|ul|ol)>/gi, " ")
+    .replace(/<[^>]*>/g, "")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")

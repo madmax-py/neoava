@@ -52,6 +52,17 @@ Telas (barra lateral no computador, barra inferior no celular):
 - **Disciplina**: aproveitamento, pontos por VA, desempenho por atividade, notas, status de envio e
   feedback das tarefas, tentativas e notas dos questionários, conteúdo com o que já foi concluído.
 - **Prazos**, **Histórico** e **Perfil** (seus dados no AVA, somente leitura).
+- **Questionário** (clique no nome de um quiz na página da disciplina): nota, tentativas, prazo, tempo
+  limite, regras de acesso (senha, rede, Safe Exam Browser…) e tipos de questão.
+- **Tentativa**: as questões de uma tentativa em andamento (com a resposta já salva no AVA marcada)
+  ou a revisão de uma tentativa finalizada. Tudo **somente leitura**: os campos ficam desativados e
+  nada é iniciado, salvo ou enviado. Cada questão mostra o inventário dos campos do formulário
+  (`q123:1_answer`, `q123:1_:sequencecheck`…), que é o que o AVA espera de volta ao responder.
+  - Em quizzes com navegação sequencial, o AVA só deixa ler a página atual da tentativa.
+  - Se o tempo da tentativa já acabou, o app pede um clique antes de ler as questões: ao abrir,
+    o AVA pode finalizar ou abandonar a tentativa (o mesmo que aconteceria no próprio AVA).
+  - O HTML das questões vem do Moodle e é reconstruído com uma lista fechada de tags e atributos
+    (`src/question-html.ts`): scripts, estilos, eventos, botões e links `javascript:` são descartados.
 
 **Modelo de notas (UniEvangélica):** 3 ciclos por semestre (VA1, VA2, VA3 — ou "FASE 1/2/3" nas
 on-line), cada um com até 100 pontos. As notas das atividades somam direto no ciclo; a média final
@@ -106,6 +117,7 @@ src/ui.ts              componentes visuais e gráficos (HTML/CSS/SVG, sem biblio
 src/state.ts           estado compartilhado (cliente, usuário, navegação)
 src/data.ts            busca/agregação de dados usada por várias telas
 src/layout.ts          barra lateral, carregamento, avatar
+src/question-html.ts  limpeza do HTML das questões e inventário dos campos
 src/views/             uma tela por arquivo
 src/demo.ts            dados fictícios do modo ?demo (só em dev)
 src/main.ts            inicialização e roteamento

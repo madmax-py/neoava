@@ -172,7 +172,7 @@ export async function courseView(id: number, rid: number) {
               h(
                 "div",
                 { class: "event-body" },
-                h("div", { class: "event-title" }, q.name),
+                h("div", { class: "event-title" }, h("a", { href: `#/disciplina/${id}/questionario/${q.id}`, class: "event-link" }, q.name, " →")),
                 h(
                   "div",
                   { class: "muted small" },

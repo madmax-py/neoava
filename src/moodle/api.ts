@@ -164,6 +164,9 @@ export interface Quiz {
   grademethod?: number;
   decimalpoints?: number;
   visible?: boolean;
+  /** "free" (qualquer página) ou "sequential" (só a página atual, sem voltar). */
+  navmethod?: string;
+  intro?: string;
 }
 
 export interface QuizAttempt {
@@ -174,6 +177,65 @@ export interface QuizAttempt {
   timefinish: number;
   /** Pontos brutos (escala sumgrades do quiz); null se as opções de revisão escondem a nota. */
   sumgrades: number | null;
+  /** Página em que a tentativa está (0 = primeira). */
+  currentpage?: number;
+  /** Ordem das questões: números dos slots, com 0 marcando o fim de cada página (ex.: "1,2,0,3,0"). */
+  layout?: string;
+  timemodified?: number;
+}
+
+export interface QuizAccess {
+  canattempt: boolean;
+  canreviewmyattempts: boolean;
+  /** Descrição das regras (tempo limite, senha, rede, Safe Exam Browser…). */
+  accessrules: string[];
+  activerulenames: string[];
+  /** Motivos que impedem entrar no questionário agora. */
+  preventaccessreasons: string[];
+}
+
+export interface AttemptAccess {
+  /** Hora em que a tentativa expira (0/ausente = sem tempo limite). */
+  endtime?: number;
+  isfinished: boolean;
+  ispreflightcheckrequired?: boolean;
+  preventnewattemptreasons: string[];
+}
+
+/** Uma questão como o Moodle devolve: o HTML já renderizado, com os campos do formulário. */
+export interface QuizQuestion {
+  slot: number;
+  type: string;
+  page: number;
+  html: string;
+  /** Número exibido ("1", "2"…); vazio em blocos de descrição. */
+  number?: number;
+  questionnumber?: string;
+  flagged: boolean;
+  /** Estado interno: todo, complete, invalid, gradedright, gradedwrong, gradedpartial… */
+  state?: string;
+  /** Texto do estado ("Ainda não respondida", "Correta"…). */
+  status?: string;
+  mark?: string;
+  maxmark?: number;
+  sequencecheck?: number;
+  blockedbyprevious?: boolean;
+}
+
+export interface AttemptData {
+  attempt: QuizAttempt;
+  messages: string[];
+  /** Próxima página, ou -1 se esta é a última. */
+  nextpage: number;
+  questions: QuizQuestion[];
+}
+
+export interface AttemptReview {
+  grade: string;
+  attempt: QuizAttempt;
+  /** Linhas do resumo (Iniciado em, Concluída em, Tempo, Notas, Feedback…), com HTML. */
+  additionaldata: { id: string; title: string; content: string }[];
+  questions: QuizQuestion[];
 }
 
 export interface CompletionStatus {
@@ -281,6 +343,28 @@ export function createApi(c: MoodleClient) {
         { quizid, userid },
         { ttlSeconds: 20 * MIN, ...o },
       ),
+
+    quizAccess: (quizid: number, o?: CallOptions) =>
+      c.call<QuizAccess>("mod_quiz_get_quiz_access_information", { quizid }, { ttlSeconds: 5 * MIN, ...o }),
+
+    attemptAccess: (quizid: number, attemptid: number, o?: CallOptions) =>
+      c.call<AttemptAccess>("mod_quiz_get_attempt_access_information", { quizid, attemptid }, { ttlSeconds: 5 * MIN, ...o }),
+
+    quizQtypes: (quizid: number, o?: CallOptions) =>
+      c
+        .call<{ questiontypes: string[] }>("mod_quiz_get_quiz_required_qtypes", { quizid }, { ttlSeconds: 60 * MIN, ...o })
+        .then((r) => r.questiontypes),
+
+    /**
+     * Questões de uma página de uma tentativa em andamento. Só lê: não salva nada, não muda de página.
+     * Nunca vai para o cache (a tentativa muda a cada resposta dada no AVA).
+     */
+    attemptData: (attemptid: number, page: number) =>
+      c.call<AttemptData>("mod_quiz_get_attempt_data", { attemptid, page }, { noStore: true }),
+
+    /** Revisão de uma tentativa finalizada (todas as páginas). O que aparece depende das opções de revisão do quiz. */
+    attemptReview: (attemptid: number, o?: CallOptions) =>
+      c.call<AttemptReview>("mod_quiz_get_attempt_review", { attemptid, page: -1 }, { ttlSeconds: 30 * MIN, ...o }),
 
     completion: (courseid: number, userid: number, o?: CallOptions) =>
       c

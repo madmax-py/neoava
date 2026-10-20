@@ -124,14 +124,89 @@ const functions = [
   "core_user_get_users_by_field",
   "core_badges_get_user_badges",
   "core_calendar_get_calendar_events",
+  "mod_quiz_get_quiz_access_information",
+  "mod_quiz_get_attempt_access_information",
+  "mod_quiz_get_quiz_required_qtypes",
+  "mod_quiz_get_attempt_data",
+  "mod_quiz_get_attempt_review",
 ].map((name) => ({ name, version: "demo" }));
 
 const quizDefs = (cid: number) => [
   { id: cid * 100 + 1, name: "Quiz Avaliativo — Aula 4", timeclose: now - 6 * D, attempts: 2, grade: 1, state: "done" },
-  { id: cid * 100 + 2, name: "Quiz Avaliativo — Aula 5", timeclose: now + 3 * D, attempts: 1, grade: 1, state: "progress" },
+  { id: cid * 100 + 2, name: "Quiz Avaliativo — Aula 5", timeclose: now + 3 * D, attempts: 2, grade: 1, state: "progress" },
   { id: cid * 100 + 3, name: "Quiz de revisão", timeclose: now - 2 * D, attempts: 0, grade: 2, state: "none" },
   { id: cid * 100 + 4, name: "Simulado VA2", timeclose: now + 15 * D, attempts: 3, grade: 2, state: "none" },
 ];
+
+const allQuizzes = () => current.flatMap((c) => quizDefs(c.id));
+const findQuiz = (id: number) => allQuizzes().find((x) => x.id === id);
+
+function demoAttempts(q: ReturnType<typeof quizDefs>[number]) {
+  if (q.state === "none") return [];
+  // Disciplinas ímpares usam navegação livre; pares, sequencial (no AVA isso varia por quiz).
+  const free = Math.floor(q.id / 100) % 2 === 1;
+  return [
+    { id: q.id * 10 + 1, attempt: 1, state: "finished", timestart: now - 8 * D, timefinish: now - 8 * D + 903, sumgrades: 6, currentpage: 1, layout: "1,2,0,3,4,0", free },
+    ...(q.state === "progress" ? [{ id: q.id * 10 + 2, attempt: 2, state: "inprogress", timestart: now - 600, timefinish: 0, sumgrades: null, currentpage: 0, layout: "1,2,0,3,4,0", free }] : []),
+  ];
+}
+
+/** HTML no formato que o Moodle 4.x/5.x devolve para cada tipo de questão. */
+function demoQuestions(aid: number, review: boolean) {
+  const uid = aid;
+  const radio = (slot: number, opts: string[], chosen: number | null, right: number, multiLetters = true) =>
+    opts
+      .map((t, i) => {
+        const id = `q${uid}:${slot}_answer${i}`;
+        const mark = review && chosen === i ? (i === right ? ' <i class="icon fa fa-check text-success fa-fw" title="Correto" aria-label="Correto"></i>' : ' <i class="icon fa fa-xmark text-danger fa-fw" title="Incorreto" aria-label="Incorreto"></i>') : "";
+        const cls = review && chosen === i ? (i === right ? " correct" : " incorrect") : "";
+        return `<div class="r${i % 2}${cls}"><input type="radio" name="q${uid}:${slot}_answer" value="${i}" id="${id}" aria-labelledby="${id}_label"${chosen === i ? ' checked="checked"' : ""}${review ? ' disabled="disabled"' : ""}><div class="d-flex w-auto" id="${id}_label" data-region="answer-label">${multiLetters ? `<span class="answernumber">${"abcde"[i]}. </span>` : ""}<div class="flex-fill ms-1">${t}</div></div>${mark}</div>`;
+      })
+      .join("");
+  const wrap = (slot: number, type: string, stateCls: string, body: string, outcome = "") =>
+    `<div id="question-${uid}-${slot}" class="que ${type} deferredfeedback ${stateCls}"><div class="info"><h3 class="no">Questão <span class="qno">${slot}</span></h3><div class="state">x</div><div class="grade">Vale 2,50 ponto(s).</div><div class="questionflag editable"><input type="hidden" name="q${uid}:${slot}_:flagged" value="0"><input type="checkbox" id="q${uid}:${slot}_:flaggedcheckbox" name="q${uid}:${slot}_:flagged" value="1"><label id="q${uid}:${slot}_:flaggedlabel" for="q${uid}:${slot}_:flaggedcheckbox">Marcar questão</label></div></div><div class="content"><div class="formulation clearfix"><h4 class="accesshide">Texto da questão</h4><input type="hidden" name="q${uid}:${slot}_:sequencecheck" value="${review ? 3 : 1}">${body}</div>${outcome}</div></div><script>alert("isto nunca deve rodar")</script>`;
+  const outcome = (txt: string) => (review ? `<div class="outcome clearfix"><h4 class="accesshide">Feedback</h4><div class="feedback"><div class="rightanswer">${txt}</div></div></div>` : "");
+  const qs = [
+    {
+      slot: 1, type: "multichoice", page: 0,
+      body: `<div class="qtext"><p>Qual forma normal elimina <strong>dependências transitivas</strong>?</p></div><fieldset class="ablock no-overflow visual-scroll-x"><legend class="prompt h6 fw-normal visually-hidden">Escolha uma opção:</legend><div class="answer">${radio(1, ["1FN", "2FN", "3FN", "FNBC"], review ? 2 : 2, 2)}</div></fieldset>`,
+      right: true, out: "A resposta correta é: 3FN",
+    },
+    {
+      slot: 2, type: "truefalse", page: 0,
+      body: `<div class="qtext"><p>Toda relação na FNBC também está na 3FN.</p><p><img src="https://avagrad.unievangelica.edu.br/pluginfile.php/123/question/questiontext/1/2/45/diagrama.png" alt="Diagrama de dependências" onerror="alert(1)" width="320"></p></div><fieldset class="ablock"><legend class="prompt h6 fw-normal visually-hidden">Escolha uma opção:</legend><div class="answer">${radio(2, ["Verdadeiro", "Falso"], review ? 1 : null, 0, false)}</div></fieldset>`,
+      right: false, out: "A resposta correta é 'Verdadeiro'.",
+    },
+    {
+      slot: 3, type: "shortanswer", page: 1,
+      body: `<div class="qtext"><p>Qual comando SQL remove uma tabela inteira, incluindo a estrutura?</p></div><div class="ablock form-inline"><label for="q${uid}:3_answer">Resposta:</label><span class="answer"><input type="text" name="q${uid}:3_answer" id="q${uid}:3_answer" size="30" class="form-control d-inline" value="${review ? "DROP TABLE" : ""}"${review ? ' readonly="readonly"' : ""}></span></div>`,
+      right: true, out: "A resposta correta é: DROP TABLE",
+    },
+    {
+      slot: 4, type: "multichoice", page: 1,
+      body: `<div class="qtext"><p>Em um índice B-Tree, a busca por igualdade tem custo:</p><a href="javascript:alert(1)">link malicioso</a></div><fieldset class="ablock"><legend class="prompt h6 fw-normal visually-hidden">Escolha uma opção:</legend><div class="answer">${radio(4, ["O(1)", "O(log n)", "O(n)", "O(n log n)"], review ? 0 : null, 1)}</div></fieldset>`,
+      right: false, out: "A resposta correta é: O(log n)",
+    },
+  ];
+  return qs.map((q) => {
+    const answered = review || q.slot === 1;
+    const state = review ? (q.right ? "gradedright" : "gradedwrong") : answered ? "complete" : "todo";
+    return {
+      slot: q.slot,
+      type: q.type,
+      page: q.page,
+      number: q.slot,
+      html: wrap(q.slot, q.type, review ? (q.right ? "correct" : "incorrect") : answered ? "answersaved" : "notyetanswered", q.body, outcome(q.out)),
+      flagged: q.slot === 4 && !review,
+      state,
+      status: review ? (q.right ? "Correto" : "Incorreto") : answered ? "Resposta salva" : "Ainda não respondida",
+      mark: review ? (q.right ? "2,50" : "0,00") : undefined,
+      maxmark: 2.5,
+      sequencecheck: review ? 3 : 1,
+      blockedbyprevious: false,
+    };
+  });
+}
 
 function respond(fn: string, p: URLSearchParams): unknown {
   switch (fn) {
@@ -189,16 +264,74 @@ function respond(fn: string, p: URLSearchParams): unknown {
     }
     case "mod_quiz_get_quizzes_by_courses": {
       const cid = Number(p.get("courseids[0]"));
-      return { quizzes: quizDefs(cid).map((q) => ({ ...q, coursemodule: q.id, course: cid, timeopen: 0, timelimit: 1800, sumgrades: 10, decimalpoints: 2, visible: true })) };
+      return {
+        quizzes: quizDefs(cid).map((q) => ({
+          ...q,
+          coursemodule: q.id,
+          course: cid,
+          timeopen: 0,
+          timelimit: 1800,
+          sumgrades: 10,
+          decimalpoints: 2,
+          visible: true,
+          navmethod: cid % 2 === 1 ? "free" : "sequential",
+          intro: "<p>Responda com base no material da <b>aula</b>. Boa prova!</p>",
+        })),
+      };
     }
     case "mod_quiz_get_user_quiz_attempts": {
-      const q = Object.values(current).flatMap((c) => quizDefs(c.id)).find((x) => x.id === Number(p.get("quizid")));
-      if (!q || q.state === "none") return { attempts: [] };
+      const q = findQuiz(Number(p.get("quizid")));
+      return { attempts: q ? demoAttempts(q) : [] };
+    }
+    case "mod_quiz_get_quiz_access_information":
       return {
-        attempts: [
-          { id: 1, attempt: 1, state: "finished", timestart: now - 8 * D, timefinish: now - 8 * D + 900, sumgrades: 6 },
-          ...(q.state === "progress" ? [{ id: 2, attempt: 2, state: "inprogress", timestart: now - 3600, timefinish: 0, sumgrades: null }] : []),
+        canattempt: true,
+        canmanage: false,
+        canpreview: false,
+        canreviewmyattempts: true,
+        canviewreports: false,
+        accessrules: ["Tempo limite: 30 minutos", "Tentativas permitidas: 2", "Este questionário fecha em <b>sexta-feira</b>."],
+        activerulenames: ["quizaccess_timelimit", "quizaccess_numattempts", "quizaccess_openclosedate"],
+        preventaccessreasons: [],
+        warnings: [],
+      };
+    case "mod_quiz_get_attempt_access_information": {
+      const aid = Number(p.get("attemptid"));
+      const a = aid ? allQuizzes().flatMap(demoAttempts).find((x) => x.id === aid) : undefined;
+      return {
+        endtime: a && a.state === "inprogress" ? a.timestart + 1800 : undefined,
+        isfinished: a ? a.state === "finished" : false,
+        preventnewattemptreasons: a?.state === "inprogress" ? ["Você já tem uma tentativa em andamento."] : [],
+        warnings: [],
+      };
+    }
+    case "mod_quiz_get_quiz_required_qtypes":
+      return { questiontypes: ["multichoice", "truefalse", "shortanswer", "ddwtos"], warnings: [] };
+    case "mod_quiz_get_attempt_data": {
+      const aid = Number(p.get("attemptid"));
+      const a = allQuizzes().flatMap(demoAttempts).find((x) => x.id === aid);
+      const page = Number(p.get("page"));
+      if (!a || a.state !== "inprogress") return { exception: "moodle_quiz_exception", errorcode: "attemptalreadyclosed", message: "Esta tentativa já foi finalizada." };
+      if (page !== a.currentpage && !a.free) return { exception: "moodle_quiz_exception", errorcode: "outofsequenceaccess", message: "Acesso fora de sequência." };
+      const qs = demoQuestions(aid, false).filter((q) => q.page === page);
+      return { attempt: a, messages: [], nextpage: page >= 1 ? -1 : page + 1, questions: qs, warnings: [] };
+    }
+    case "mod_quiz_get_attempt_review": {
+      const aid = Number(p.get("attemptid"));
+      const a = allQuizzes().flatMap(demoAttempts).find((x) => x.id === aid);
+      return {
+        grade: "0,60",
+        attempt: a,
+        additionaldata: [
+          { id: "startedon", title: "Iniciado em", content: "quarta-feira, 8 out 2026, 19:02" },
+          { id: "state", title: "Estado", content: "Finalizada" },
+          { id: "completedon", title: "Concluída em", content: "quarta-feira, 8 out 2026, 19:17" },
+          { id: "timetaken", title: "Tempo empregado", content: "15 minutos 3 segundos" },
+          { id: "marks", title: "Avaliar", content: "6,00/10,00" },
+          { id: "grade", title: "Nota", content: "<b>0,60</b> de um máximo de 1,00(<b>60</b>%)" },
         ],
+        questions: demoQuestions(aid, true),
+        warnings: [],
       };
     }
     case "mod_quiz_get_user_best_grade":

@@ -8,6 +8,7 @@ import { showTokenScreen } from "./views/login";
 import { dashboard } from "./views/dashboard";
 import { coursesPage } from "./views/courses";
 import { courseView } from "./views/course";
+import { attemptPage, quizPage } from "./views/quiz";
 import { deadlinesPage } from "./views/deadlines";
 import { historyPage } from "./views/history";
 import { profilePage } from "./views/profile";
@@ -28,8 +29,11 @@ async function route() {
       state.available = new Set(state.site.functions.map((f) => f.name));
     }
     const hash = location.hash;
+    const qz = hash.match(/^#\/disciplina\/(\d+)\/questionario\/(\d+)(?:\/tentativa\/(\d+)(?:\/pagina\/(\d+))?)?/);
     const m = hash.match(/^#\/disciplina\/(\d+)/);
-    if (m) await courseView(Number(m[1]), id);
+    if (qz?.[3]) await attemptPage(Number(qz[1]), Number(qz[2]), Number(qz[3]), qz[4] ? Number(qz[4]) - 1 : null, id);
+    else if (qz) await quizPage(Number(qz[1]), Number(qz[2]), id);
+    else if (m) await courseView(Number(m[1]), id);
     else if (hash.startsWith("#/disciplinas")) await coursesPage(id);
     else if (hash.startsWith("#/prazos")) await deadlinesPage(id);
     else if (hash.startsWith("#/historico")) await historyPage(id);
