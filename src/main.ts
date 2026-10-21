@@ -111,3 +111,6 @@ if (token) setup(token);
 if (import.meta.env.DEV && token)
   console.info(`Token em uso: ${maskToken(token)}`);
 route();
+
+// Instalar no celular/computador e abrir sem rede (só em produção: no dev atrapalharia o recarregamento).
+if (import.meta.env.PROD && "serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
