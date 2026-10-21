@@ -1,8 +1,9 @@
-// HTML das questões do Moodle: limpeza para exibir e inventário dos campos do formulário.
+// HTML das questões do Moodle: limpeza para exibir/responder e inventário dos campos do formulário.
 //
 // O Moodle devolve cada questão já renderizada em HTML. Aqui ele é lido com DOMParser (que não
 // executa scripts nem carrega nada) e reconstruído só com tags e atributos de uma lista fechada.
-// Scripts, estilos, eventos, botões e formulários ficam de fora; os campos ficam desativados.
+// Scripts, estilos, eventos, botões e formulários ficam de fora. Os campos ficam desativados,
+// a não ser no modo de responder.
 
 import { state } from "./state";
 
@@ -72,6 +73,7 @@ function imageSrc(raw: string): string | null {
 }
 
 function safeHref(raw: string): string | null {
+  if (!raw || raw.startsWith("#")) return null;
   try {
     const u = new URL(raw, __MOODLE_URL__);
     return u.protocol === "https:" || u.protocol === "http:" ? u.toString() : null;
@@ -98,7 +100,7 @@ function chip(text: string, tone: string, label: string) {
   return s;
 }
 
-function clean(node: Node, out: Node) {
+function clean(node: Node, out: Node, editable: boolean) {
   for (const child of Array.from(node.childNodes)) {
     if (child.nodeType === Node.TEXT_NODE) {
       out.appendChild(document.createTextNode(child.textContent ?? ""));
@@ -116,7 +118,7 @@ function clean(node: Node, out: Node) {
       continue;
     }
     if (!KEEP.has(tag)) {
-      clean(el, out); // desembrulha
+      clean(el, out, editable); // desembrulha
       continue;
     }
     if (tag === "input" && !INPUT_TYPES.has((el.getAttribute("type") ?? "text").toLowerCase())) continue;
@@ -151,21 +153,27 @@ function clean(node: Node, out: Node) {
         copy.setAttribute("rel", "noreferrer");
       }
     }
-    // Somente leitura: nada pode ser marcado ou digitado.
-    if (tag === "input" || tag === "select" || tag === "textarea") copy.setAttribute("disabled", "");
+    // Fora do modo de responder, nada pode ser marcado ou digitado.
+    if (!editable && (tag === "input" || tag === "select" || tag === "textarea")) copy.setAttribute("disabled", "");
     if (tag === "textarea") copy.textContent = el.textContent ?? "";
-    else clean(el, copy);
+    else clean(el, copy, editable);
     out.appendChild(copy);
   }
 }
 
-/** HTML de uma questão do Moodle → fragmento seguro para exibir (campos desativados). */
-export function renderQuestionHtml(html: string): DocumentFragment {
+/**
+ * HTML de uma questão do Moodle → fragmento seguro para exibir.
+ * Sem `editable`, os campos ficam desativados; com `editable`, ficam como no AVA (para responder).
+ */
+export function renderQuestionHtml(html: string, editable = false): DocumentFragment {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const frag = document.createDocumentFragment();
-  clean(doc.body, frag);
+  clean(doc.body, frag, editable);
   return frag;
 }
+
+/** Tipos que dependem do JavaScript do Moodle (arrastar e soltar etc.) e não dá para responder aqui. */
+export const NEEDS_MOODLE_JS = new Set(["ddwtos", "ddimageortext", "ddmarker", "ordering", "drawlines"]);
 
 // ---------- Inventário dos campos ----------
 

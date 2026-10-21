@@ -273,6 +273,16 @@ export interface UserProfile {
 
 const MIN = 60;
 
+/** Par nome → valor de um campo do formulário da questão, no formato que o Moodle espera. */
+export interface FormPair {
+  name: string;
+  value: string;
+}
+
+/** Dados de pré-verificação (ex.: { quizpassword: "…" } para quiz com senha). */
+export type Preflight = Record<string, string>;
+const preflight = (p?: Preflight) => (p ? Object.entries(p).map(([name, value]) => ({ name, value })) : undefined);
+
 /** Campos formatados do quadro de notas podem trazer HTML (ícones de aprovado/reprovado). */
 function cleanItem(i: GradeItem): GradeItem {
   const grade = cleanGradeHtml(i.gradeformatted);
@@ -357,10 +367,43 @@ export function createApi(c: MoodleClient) {
 
     /**
      * Questões de uma página de uma tentativa em andamento. Só lê: não salva nada, não muda de página.
-     * Nunca vai para o cache (a tentativa muda a cada resposta dada no AVA).
+     * Nunca vai para o cache (a tentativa muda a cada resposta).
      */
-    attemptData: (attemptid: number, page: number) =>
-      c.call<AttemptData>("mod_quiz_get_attempt_data", { attemptid, page }, { noStore: true }),
+    attemptData: (attemptid: number, page: number, pre?: Preflight) =>
+      c.call<AttemptData>("mod_quiz_get_attempt_data", { attemptid, page, preflightdata: preflight(pre) }, { noStore: true }),
+
+    /** Situação de cada questão antes de enviar (sem o HTML). */
+    attemptSummary: (attemptid: number, pre?: Preflight) =>
+      c
+        .call<{ questions: QuizQuestion[] }>("mod_quiz_get_attempt_summary", { attemptid, preflightdata: preflight(pre) }, { noStore: true })
+        .then((r) => r.questions),
+
+    // ---------- Escrita (fazer o questionário). Cada uma exige allowWrite; a tela confirma iniciar e enviar. ----------
+
+    /** Abre uma tentativa nova. Conta no limite de tentativas e o tempo começa a correr. */
+    startAttempt: (quizid: number, pre?: Preflight) =>
+      c
+        .call<{ attempt: QuizAttempt }>("mod_quiz_start_attempt", { quizid, preflightdata: preflight(pre) }, { allowWrite: true })
+        .then((r) => r.attempt),
+
+    /** Salvamento automático (como o do AVA): grava as respostas sem "avançar" a questão. */
+    saveAttempt: (attemptid: number, data: FormPair[], pre?: Preflight) =>
+      c.call<{ status: boolean }>("mod_quiz_save_attempt", { attemptid, data, preflightdata: preflight(pre) }, { allowWrite: true }),
+
+    /**
+     * Salva as respostas da página (como o botão "Próxima página" do AVA).
+     * Com finish = true, ENVIA a tentativa para correção — não tem volta.
+     */
+    processAttempt: (attemptid: number, data: FormPair[], finish: boolean, pre?: Preflight, timeup = false) =>
+      c.call<{ state: string }>(
+        "mod_quiz_process_attempt",
+        { attemptid, data, finishattempt: finish, timeup, preflightdata: preflight(pre) },
+        { allowWrite: true },
+      ),
+
+    /** Registra a página atual da tentativa (necessário para avançar na navegação sequencial). */
+    viewAttempt: (attemptid: number, page: number, pre?: Preflight) =>
+      c.call<{ status: boolean }>("mod_quiz_view_attempt", { attemptid, page, preflightdata: preflight(pre) }, { allowWrite: true }),
 
     /** Revisão de uma tentativa finalizada (todas as páginas). O que aparece depende das opções de revisão do quiz. */
     attemptReview: (attemptid: number, o?: CallOptions) =>

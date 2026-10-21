@@ -1,5 +1,6 @@
 // Cliente mínimo e isomórfico (Node 18+ e navegador) para os Web Services REST do Moodle.
-// Somente leitura: só chama funções da READ_ONLY_FUNCTIONS, a menos que allowWrite seja passado.
+// Somente leitura por padrão: só chama funções da READ_ONLY_FUNCTIONS. As poucas de WRITE_FUNCTIONS
+// (fazer questionário) exigem `allowWrite`; qualquer outra escrita é sempre bloqueada.
 
 export type Params = Record<string, unknown>;
 
@@ -29,7 +30,19 @@ export const READ_ONLY_FUNCTIONS = new Set([
   "mod_quiz_get_attempt_access_information",
   "mod_quiz_get_quiz_required_qtypes",
   "mod_quiz_get_attempt_data",
+  "mod_quiz_get_attempt_summary",
   "mod_quiz_get_attempt_review",
+]);
+
+/**
+ * Únicas funções que gravam no AVA, e só com `allowWrite` (a tela pede confirmação para iniciar e enviar).
+ * Tudo para fazer um questionário, como o app oficial: iniciar, salvar, mudar de página e enviar.
+ */
+export const WRITE_FUNCTIONS = new Set([
+  "mod_quiz_start_attempt",
+  "mod_quiz_save_attempt",
+  "mod_quiz_process_attempt",
+  "mod_quiz_view_attempt",
 ]);
 
 /** Padrões que indicam escrita/registro de ação. Bloqueados mesmo que alguém os adicione à lista acima. */
@@ -89,7 +102,7 @@ export interface CallOptions {
   ttlSeconds?: number;
   /** Ignora o cache e busca de novo (o resultado novo é gravado no cache). */
   refresh?: boolean;
-  /** Necessário para qualquer função fora da lista de leitura. A UI deve pedir confirmação antes. */
+  /** Necessário para as funções de WRITE_FUNCTIONS (as demais continuam bloqueadas). */
   allowWrite?: boolean;
   /** Não lê nem grava no cache (para respostas que são credenciais). */
   noStore?: boolean;
@@ -151,7 +164,7 @@ export class MoodleClient {
 
   async call<T = unknown>(wsfunction: string, params: Params = {}, opts: CallOptions = {}): Promise<T> {
     const isReadOnly = isReadOnlyFunction(wsfunction);
-    if (!isReadOnly && !opts.allowWrite) {
+    if (!isReadOnly && !(opts.allowWrite && WRITE_FUNCTIONS.has(wsfunction))) {
       throw new MoodleError(`Função bloqueada (somente leitura): ${wsfunction}`, "blockedwrite", wsfunction);
     }
 

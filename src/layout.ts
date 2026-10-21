@@ -66,7 +66,7 @@ export function shell(...content: (Child | Child[])[]) {
         "div",
         { class: "content" },
         h("main", {}, ...content),
-        h("footer", {}, "As notas vêm do AVA (Moodle) e podem não ser as notas oficiais do sistema acadêmico. Somente leitura."),
+        h("footer", {}, "As notas vêm do AVA (Moodle) e podem não ser as notas oficiais do sistema acadêmico. Somente leitura, exceto ao fazer um questionário."),
       ),
       h("nav", { class: "bottom-nav", "aria-label": "Navegação" }, NAV.map((n) => h("a", { href: n.href, class: n.href === active ? "active" : "" }, icon(n.icon, 22), h("span", {}, n.label)))),
     ),

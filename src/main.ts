@@ -29,9 +29,9 @@ async function route() {
       state.available = new Set(state.site.functions.map((f) => f.name));
     }
     const hash = location.hash;
-    const qz = hash.match(/^#\/disciplina\/(\d+)\/questionario\/(\d+)(?:\/tentativa\/(\d+)(?:\/pagina\/(\d+))?)?/);
+    const qz = hash.match(/^#\/disciplina\/(\d+)\/questionario\/(\d+)(?:\/tentativa\/(\d+)(?:\/pagina\/(\d+)|\/(resumo))?)?/);
     const m = hash.match(/^#\/disciplina\/(\d+)/);
-    if (qz?.[3]) await attemptPage(Number(qz[1]), Number(qz[2]), Number(qz[3]), qz[4] ? Number(qz[4]) - 1 : null, id);
+    if (qz?.[3]) await attemptPage(Number(qz[1]), Number(qz[2]), Number(qz[3]), qz[4] ? Number(qz[4]) - 1 : null, id, qz[5] ? "resumo" : undefined);
     else if (qz) await quizPage(Number(qz[1]), Number(qz[2]), id);
     else if (m) await courseView(Number(m[1]), id);
     else if (hash.startsWith("#/disciplinas")) await coursesPage(id);

@@ -1,7 +1,8 @@
 # NeoAVA
 
-Front-end pessoal, **somente leitura**, para o AVA da UniEvangélica (Moodle), usando a API
-oficial de Web Services (o mesmo token do app móvel do Moodle).
+Front-end pessoal para o AVA da UniEvangélica (Moodle), usando a API oficial de Web Services
+(o mesmo token do app móvel do Moodle). É **somente leitura**, com uma exceção: fazer
+questionários (iniciar, salvar e enviar tentativas), como o app oficial faz.
 
 > As notas exibidas são as do AVA e podem não ser as notas oficiais do sistema acadêmico.
 
@@ -53,16 +54,26 @@ Telas (barra lateral no computador, barra inferior no celular):
   feedback das tarefas, tentativas e notas dos questionários, conteúdo com o que já foi concluído.
 - **Prazos**, **Histórico** e **Perfil** (seus dados no AVA, somente leitura).
 - **Questionário** (clique no nome de um quiz na página da disciplina): nota, tentativas, prazo, tempo
-  limite, regras de acesso (senha, rede, Safe Exam Browser…) e tipos de questão.
-- **Tentativa**: as questões de uma tentativa em andamento (com a resposta já salva no AVA marcada)
-  ou a revisão de uma tentativa finalizada. Tudo **somente leitura**: os campos ficam desativados e
-  nada é iniciado, salvo ou enviado. Cada questão mostra o inventário dos campos do formulário
-  (`q123:1_answer`, `q123:1_:sequencecheck`…), que é o que o AVA espera de volta ao responder.
-  - Em quizzes com navegação sequencial, o AVA só deixa ler a página atual da tentativa.
-  - Se o tempo da tentativa já acabou, o app pede um clique antes de ler as questões: ao abrir,
-    o AVA pode finalizar ou abandonar a tentativa (o mesmo que aconteceria no próprio AVA).
+  limite, regras de acesso (senha, rede, Safe Exam Browser…), tipos de questão e o botão
+  **Iniciar tentativa** / **Continuar tentativa**.
+- **Tentativa**: responder o questionário pelo NeoAVA, como no app oficial do Moodle.
+  - **Iniciar** pede confirmação (avisa que conta no limite e que o tempo começa a correr) e a senha,
+    se o quiz tiver uma. A senha fica só na memória da aba.
+  - As respostas são **salvas automaticamente** no AVA ~2 s depois de cada alteração, ao trocar de
+    página, ao clicar em "Salvar agora" e ao sair da tela. Clicar no texto da alternativa marca a opção.
+  - **Revisar e enviar** mostra a situação de cada questão; **Enviar tudo e terminar** pede
+    confirmação (avisa quantas estão sem resposta) e manda para correção. Não tem volta.
+  - Se o tempo acabar com a página aberta, a tentativa é enviada automaticamente, como o AVA faz.
+  - Navegação sequencial é respeitada (não dá para voltar páginas, como no AVA).
+  - Questões de arrastar/ordenar (`ddwtos`, `ddimageortext`, `ddmarker`, `ordering`) dependem do
+    JavaScript do AVA: aparecem desativadas, com aviso para responder lá.
+  - Quizzes com Safe Exam Browser ou restrição de rede não podem ser iniciados por aqui.
+  - Tentativas finalizadas mostram a **revisão** (nota, certo/errado, feedback), conforme as opções
+    do professor. Tentativas com tempo esgotado só são lidas após um clique.
   - O HTML das questões vem do Moodle e é reconstruído com uma lista fechada de tags e atributos
     (`src/question-html.ts`): scripts, estilos, eventos, botões e links `javascript:` são descartados.
+  - O Moodle ignora em silêncio respostas com `sequencecheck` desatualizado; depois de cada gravação
+    o app relê a página e atualiza esse campo.
 
 **Modelo de notas (UniEvangélica):** 3 ciclos por semestre (VA1, VA2, VA3 — ou "FASE 1/2/3" nas
 on-line), cada um com até 100 pontos. As notas das atividades somam direto no ciclo; a média final
@@ -101,8 +112,11 @@ O navegador chama o Moodle direto (o servidor responde com `Access-Control-Allow
 
 - `.env`, `.cache/` e `dist/` estão no `.gitignore`. Nunca commitar credenciais.
 - O cliente (`src/moodle/client.ts`) só aceita funções da lista `READ_ONLY_FUNCTIONS` e bloqueia
-  nomes com padrão de escrita (`*_view_*`, `save_*`, `submit_*`, `add_*`…). Escrita exige
-  `allowWrite` explícito e confirmação na interface.
+  nomes com padrão de escrita (`*_view_*`, `save_*`, `submit_*`, `add_*`…).
+- A única escrita permitida é fazer questionário: as funções de `WRITE_FUNCTIONS`
+  (`mod_quiz_start_attempt`, `mod_quiz_save_attempt`, `mod_quiz_process_attempt`,
+  `mod_quiz_view_attempt`), e só com `allowWrite`. Qualquer outra escrita continua bloqueada.
+  Iniciar e enviar pedem confirmação na interface.
 - No máximo 2 requisições simultâneas; requisições iguais em andamento são reaproveitadas.
 - Uso individual: cada pessoa usa o próprio token, guardado localmente. Nada é centralizado.
 
@@ -120,6 +134,7 @@ src/layout.ts          barra lateral, carregamento, avatar
 src/question-html.ts  limpeza do HTML das questões e inventário dos campos
 src/views/             uma tela por arquivo
 src/demo.ts            dados fictícios do modo ?demo (só em dev)
+src/demo-quiz.ts       questionários do modo ?demo, com estado (iniciar/salvar/enviar)
 src/main.ts            inicialização e roteamento
 scripts/               CLI (site-info, resumo)
 ```

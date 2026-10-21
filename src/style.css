@@ -824,3 +824,36 @@ a.page-link:hover { background: var(--surface-2); text-decoration: none; }
 .fields-table { font-size: 0.8rem; }
 .fields-table code { white-space: nowrap; }
 .fields-table tr.hidden-field td { color: var(--muted); }
+
+/* ---------- responder questionário ---------- */
+button.danger { background: var(--bad); border-color: var(--bad); color: #fff; font-weight: 600; }
+button.danger:hover { filter: brightness(1.08); background: var(--bad); }
+a.button.primary-link { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.notice.info { background: var(--accent-wash); }
+.attempt-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0 8px; }
+.attempt-actions .spacer { flex: 1; }
+.question.editable .m-answer > div { cursor: pointer; }
+.question.editable .m-answer > div:hover { border-color: var(--axis); }
+.question.editable .qhtml input[type="text"], .question.editable .qhtml input[type="number"], .question.editable .qhtml select, .question.editable .qhtml textarea { background: var(--surface); }
+.question.editable .qhtml input:focus, .question.editable .qhtml select:focus, .question.editable .qhtml textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.question .notice { margin: 0 0 12px; }
+.summary-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.summary-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 1px solid var(--grid); border-radius: 8px; }
+
+.dialog {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: 22px 22px 18px;
+  width: min(460px, calc(100vw - 32px));
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+}
+.dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+.dialog h2 { font-size: 1.1rem; margin-bottom: 10px; }
+.dialog-body { font-size: 0.9rem; color: var(--text-2); }
+.dialog-body ul { padding-left: 18px; margin: 0; display: grid; gap: 6px; }
+.dialog-body p { margin: 0 0 8px; }
+.dialog-field { margin-top: 12px; display: grid; gap: 6px; }
+.dialog-field .error { margin: 0; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
