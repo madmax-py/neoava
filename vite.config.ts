@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig, loadEnv } from "vite";
 
 export default defineConfig(({ mode }) => {
@@ -17,6 +18,11 @@ export default defineConfig(({ mode }) => {
         // Além do padrão (.env, certificados, .git), não servir o cache dos scripts (tem notas e perfil).
         deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "**/.cache/**"],
       },
+    },
+    test: {
+      // DOM simulado: o filtro de HTML das questões usa DOMParser e document.
+      environment: "happy-dom",
+      include: ["src/**/*.test.ts"],
     },
   };
 });
