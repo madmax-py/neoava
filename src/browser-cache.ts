@@ -4,7 +4,7 @@ import type { Cache, CacheEntry } from "./moodle/client";
 const MAX_STALE_MS = 7 * 86400 * 1000;
 
 /**
- * Cache com validade no localStorage, com uma cópia em memória (trocar de página não relê nem
+ * Cache com validade no localStorage (ou no sessionStorage, sem "Lembrar neste computador"), com uma cópia em memória (trocar de página não relê nem
  * reprocessa o JSON). Entradas vencidas continuam disponíveis por até 7 dias para serem mostradas
  * na hora enquanto o app busca a versão nova (o cliente decide isso).
  *
@@ -12,22 +12,33 @@ const MAX_STALE_MS = 7 * 86400 * 1000;
  * faltar espaço, as entradas mais antigas — em vez de parar de gravar sem avisar.
  * Falhas de storage (modo privado, bloqueio) são ignoradas: aí só a memória é usada.
  */
-export class LocalStorageCache implements Cache {
+export class BrowserCache implements Cache {
   #mem = new Map<string, CacheEntry>();
 
-  constructor(private prefix = "ava-cache:") {
+  /**
+   * `persistent` = false: grava no sessionStorage (some ao fechar a aba), para computadores
+   * compartilhados. Pode mudar depois do login (opção "Lembrar neste computador").
+   */
+  constructor(
+    private prefix = "ava-cache:",
+    public persistent = true,
+  ) {
     this.prune();
+  }
+
+  get #store(): Storage {
+    return this.persistent ? localStorage : sessionStorage;
   }
 
   get(key: string): CacheEntry | undefined {
     const m = this.#mem.get(key);
     if (m) return m;
     try {
-      const raw = localStorage.getItem(this.prefix + key);
+      const raw = this.#store.getItem(this.prefix + key);
       if (!raw) return undefined;
       const e = JSON.parse(raw) as CacheEntry;
       if (typeof e?.exp !== "number" || Date.now() > e.exp + MAX_STALE_MS) {
-        localStorage.removeItem(this.prefix + key);
+        this.#store.removeItem(this.prefix + key);
         return undefined;
       }
       this.#mem.set(key, e);
@@ -47,32 +58,36 @@ export class LocalStorageCache implements Cache {
     if (this.#write(key, raw)) return;
     for (const k of this.#keysByAge()) {
       try {
-        localStorage.removeItem(k);
+        this.#store.removeItem(k);
       } catch {}
       if (this.#write(key, raw)) return;
     }
     // Não coube nem sozinho: fica só na memória até fechar a aba.
   }
 
+  /** Apaga a memória e as duas áreas (local e de sessão), para não sobrar nada ao trocar de modo. */
   clear() {
     this.#mem.clear();
-    try {
-      for (const k of Object.keys(localStorage)) if (k.startsWith(this.prefix)) localStorage.removeItem(k);
-    } catch {}
+    for (const store of [() => localStorage, () => sessionStorage]) {
+      try {
+        const s = store();
+        for (const k of Object.keys(s)) if (k.startsWith(this.prefix)) s.removeItem(k);
+      } catch {}
+    }
   }
 
   /** Remove entradas inválidas e velhas demais (ou todas as vencidas, com `aggressive`). */
   prune(aggressive = false) {
     try {
       const now = Date.now();
-      for (const k of Object.keys(localStorage)) {
+      for (const k of Object.keys(this.#store)) {
         if (!k.startsWith(this.prefix)) continue;
         try {
-          const e = JSON.parse(localStorage.getItem(k) ?? "") as CacheEntry;
+          const e = JSON.parse(this.#store.getItem(k) ?? "") as CacheEntry;
           const limit = aggressive ? e.exp : e.exp + MAX_STALE_MS;
-          if (typeof e?.exp !== "number" || now > limit) localStorage.removeItem(k);
+          if (typeof e?.exp !== "number" || now > limit) this.#store.removeItem(k);
         } catch {
-          localStorage.removeItem(k);
+          this.#store.removeItem(k);
         }
       }
     } catch {}
@@ -80,7 +95,7 @@ export class LocalStorageCache implements Cache {
 
   #write(key: string, raw: string): boolean {
     try {
-      localStorage.setItem(this.prefix + key, raw);
+      this.#store.setItem(this.prefix + key, raw);
       return true;
     } catch {
       return false;
@@ -90,11 +105,11 @@ export class LocalStorageCache implements Cache {
   /** Chaves deste cache, da que vence primeiro para a última. */
   #keysByAge(): string[] {
     try {
-      return Object.keys(localStorage)
+      return Object.keys(this.#store)
         .filter((k) => k.startsWith(this.prefix))
         .map((k) => {
           try {
-            return { k, exp: (JSON.parse(localStorage.getItem(k) ?? "") as CacheEntry).exp ?? 0 };
+            return { k, exp: (JSON.parse(this.#store.getItem(k) ?? "") as CacheEntry).exp ?? 0 };
           } catch {
             return { k, exp: 0 };
           }
@@ -109,17 +124,38 @@ export class LocalStorageCache implements Cache {
 
 const TOKEN_KEY = "ava-token";
 
+/** Token salvo: o da aba (sessionStorage) tem preferência sobre o lembrado (localStorage). */
 export function loadToken(): string {
+  for (const store of [() => sessionStorage, () => localStorage]) {
+    try {
+      const t = store().getItem(TOKEN_KEY);
+      if (t) return t;
+    } catch {}
+  }
+  return "";
+}
+
+/** O token salvo é do tipo "lembrar neste computador" (ou não há token). */
+export function tokenIsRemembered(): boolean {
   try {
-    return localStorage.getItem(TOKEN_KEY) ?? "";
+    return !sessionStorage.getItem(TOKEN_KEY);
   } catch {
-    return "";
+    return true;
   }
 }
 
-export function saveToken(token: string | null) {
-  try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
-  } catch {}
+/**
+ * Salva o token. `remember` = false guarda só nesta aba (some ao fechar). `null` apaga dos dois lugares.
+ * Sempre apaga do outro lugar, para não sobrar token esquecido.
+ */
+export function saveToken(token: string | null, remember = true) {
+  for (const [store, keep] of [
+    [() => localStorage, remember],
+    [() => sessionStorage, !remember],
+  ] as const) {
+    try {
+      if (token && keep) store().setItem(TOKEN_KEY, token);
+      else store().removeItem(TOKEN_KEY);
+    } catch {}
+  }
 }

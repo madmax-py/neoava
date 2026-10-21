@@ -3,7 +3,7 @@
 // telas fazem (o cache é por função + parâmetros), por isso espelham painel, disciplinas, prazos,
 // biblioteca, histórico, perfil e a página de cada disciplina.
 
-import { api, ifAvailable, site, state } from "./state";
+import { api, DAY, ifAvailable, site, state } from "./state";
 import { cycleData, recentClosed } from "./data";
 
 /**
@@ -11,6 +11,10 @@ import { cycleData, recentClosed } from "./data";
  * (as telas reaproveitam as chamadas que ainda estão em andamento, sem repetir).
  */
 const BUDGET_MS = 12000;
+
+/** Janela de prazo das atividades cujos detalhes são pré-carregados: entregues há pouco ou vencendo em breve. */
+const RECENT_DAYS = 14;
+const AHEAD_DAYS = 21;
 
 export async function warmUp(onProgress: (frac: number) => void): Promise<void> {
   const client = state.client!;
@@ -65,21 +69,27 @@ export async function warmUp(onProgress: (frac: number) => void): Promise<void> 
     onProgress(1);
   }
 
-  // Detalhes de cada atividade (status de envio e tentativas): seguem em segundo plano, sem segurar o login.
+  // Detalhes das atividades (status de envio e tentativas): seguem em segundo plano, sem segurar o login.
+  // Só das que têm prazo perto (as que a pessoa provavelmente vai abrir agora); as demais são buscadas
+  // quando a página delas for aberta. Assim o login não vira uma varredura do AVA inteiro.
   essentials
     .then((data) => {
       const uid = site().userid;
-      if (state.available.has("mod_assign_get_submission_status")) for (const a of data.assigns) void quiet(api().submissionStatus(a.id));
+      const now = Date.now() / 1000;
+      const near = (ts: number | undefined) => !!ts && ts > now - RECENT_DAYS * DAY && ts < now + AHEAD_DAYS * DAY;
+      if (state.available.has("mod_assign_get_submission_status"))
+        for (const a of data.assigns) if (near(a.duedate)) void quiet(api().submissionStatus(a.id));
       if (state.available.has("mod_quiz_get_user_quiz_attempts"))
         for (const q of data.quizzes)
-          void quiet(
-            api()
-              .quizAttempts(q.id, uid)
-              // A nota do questionário só é pedida pela página quando há tentativa finalizada.
-              .then(async (at) => {
-                if (at.some((x) => x.state === "finished") && state.available.has("mod_quiz_get_user_best_grade")) await api().quizBestGrade(q.id, uid);
-              }),
-          );
+          if (near(q.timeclose))
+            void quiet(
+              api()
+                .quizAttempts(q.id, uid)
+                // A nota do questionário só é pedida pela página quando há tentativa finalizada.
+                .then(async (at) => {
+                  if (at.some((x) => x.state === "finished") && state.available.has("mod_quiz_get_user_best_grade")) await api().quizBestGrade(q.id, uid);
+                }),
+            );
     })
     .catch(() => undefined);
 }

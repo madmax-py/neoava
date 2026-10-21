@@ -466,6 +466,8 @@ footer::before { content: ""; display: block; border-top: 1px solid var(--corner
 .brand.big .wordmark { font-size: 2rem; }
 form.login { display: grid; gap: 10px; margin: 20px 0 8px; }
 form.login button { padding: 10px; }
+form.login label.remember { display: flex; align-items: center; gap: 8px; cursor: pointer; justify-self: start; }
+form.login label.remember input { width: auto; margin: 0; accent-color: var(--accent, currentColor); }
 form.inline { display: flex; gap: 8px; margin-top: 10px; }
 form.inline input { flex: 1; }
 .login-card details { margin-top: 12px; }

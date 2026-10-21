@@ -10,9 +10,10 @@ const app = document.getElementById("app")!;
  * Entra com o token. Com `btn`, o botão mostra o círculo de carregamento (e a barra de progresso) enquanto os dados
  * de todas as telas vão para o cache; assim, depois de entrar, cada página abre na hora.
  */
-async function useToken(t: string, btn?: HTMLButtonElement) {
-  saveToken(t);
+async function useToken(t: string, btn?: HTMLButtonElement, remember = true) {
+  saveToken(t, remember);
   cache.clear();
+  cache.persistent = remember;
   state.site = null;
   setup(t);
   if (btn) {
@@ -55,6 +56,7 @@ export function showTokenScreen(error?: MoodleError) {
     placeholder: "Senha",
     autocomplete: "current-password",
   });
+  const remember = h("input", { type: "checkbox", checked: true });
   const loginBtn = h("button", { type: "submit", class: "primary" }, "Entrar");
   const loginMsg = h("div", { class: "error", hidden: true });
   const tokenInput = h("input", {
@@ -101,7 +103,7 @@ export function showTokenScreen(error?: MoodleError) {
               try {
                 const t = await requestToken(__MOODLE_URL__, u, pass.value);
                 pass.value = "";
-                await useToken(t, loginBtn);
+                await useToken(t, loginBtn, remember.checked);
               } catch (err) {
                 pass.value = "";
                 loginMsg.textContent =
@@ -116,6 +118,15 @@ export function showTokenScreen(error?: MoodleError) {
           },
           user,
           pass,
+          h(
+            "label",
+            {
+              class: "remember muted small",
+              title: "Desmarque em computador compartilhado: o acesso e as notas somem ao fechar a aba.",
+            },
+            remember,
+            " Lembrar neste computador",
+          ),
           loginBtn,
         ),
         loginMsg,
@@ -138,7 +149,7 @@ export function showTokenScreen(error?: MoodleError) {
           { class: "muted small" },
           "A senha vai direto para o AVA (",
           h("code", {}, "login/token.php"),
-          ", mesmo fluxo do app oficial do Moodle) e não é guardada. Só o token fica salvo neste navegador.",
+          ", mesmo fluxo do app oficial do Moodle) e não é guardada. Só o token fica salvo neste navegador; sem “Lembrar”, ele some ao fechar a aba.",
         ),
         h(
           "details",
@@ -151,7 +162,7 @@ export function showTokenScreen(error?: MoodleError) {
               onsubmit: (e) => {
                 e.preventDefault();
                 const t = tokenInput.value.trim();
-                if (t) void useToken(t, tokenBtn);
+                if (t) void useToken(t, tokenBtn, remember.checked);
               },
             },
             tokenInput,

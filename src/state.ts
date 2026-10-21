@@ -2,11 +2,12 @@
 
 import { MoodleClient, MoodleError } from "./moodle/client";
 import { createApi, type Api, type SiteInfo } from "./moodle/api";
-import { LocalStorageCache } from "./browser-cache";
+import { BrowserCache, tokenIsRemembered } from "./browser-cache";
 
 /** Demonstração (?demo na URL): conta fictícia, sem tocar no AVA. Também em produção, pelo botão do login. */
 export const demo = new URLSearchParams(location.search).has("demo");
-export const cache = new LocalStorageCache(demo ? "ava-demo:" : undefined);
+/** Sem "Lembrar neste computador", notas e perfil ficam só no sessionStorage (somem ao fechar a aba). */
+export const cache = new BrowserCache(demo ? "ava-demo:" : undefined, demo || tokenIsRemembered());
 
 export const state = {
   client: null as MoodleClient | null,
