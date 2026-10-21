@@ -219,7 +219,7 @@ export async function recentClosed(courses: Course[], days = 7): Promise<ClosedI
   const now = nowS();
   const ids = courses.map((c) => c.id);
   const events = (await api().calendarEvents(ids, now - days * DAY, now, o)).filter(
-    (e) => (e.eventtype === "due" || e.eventtype === "close") && e.modulename && e.timestart <= now,
+    (e) => (e.eventtype === "due" || e.eventtype === "close") && e.modulename && e.timestart <= now && e.timestart >= now - days * DAY,
   );
   if (!events.length) return [];
   const assigns = events.some((e) => e.modulename === "assign") ? await ifAvailable("mod_assign_get_assignments", () => api().assignments(ids, o), [] as Assignment[]) : [];

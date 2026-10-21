@@ -1,6 +1,9 @@
 // Modo demonstração (só em `npm run dev`, com ?demo na URL): responde às chamadas do Moodle
 // com dados fictícios, sem tocar na rede. Útil para mexer no visual sem token.
 
+import { quizFunctions, quizRespond } from "./demo-quiz";
+import { assignFunctions, assignRespond, demoUpload } from "./demo-assign";
+
 const now = Math.floor(Date.now() / 1000);
 const D = 86400;
 const ts = (y: number, m: number, d: number) => Math.floor(Date.UTC(y, m - 1, d, 12) / 1000);
@@ -115,26 +118,16 @@ const functions = [
   "core_enrol_get_users_courses",
   "gradereport_overview_get_course_grades",
   "gradereport_user_get_grade_items",
-  "mod_assign_get_assignments",
   "core_calendar_get_action_events_by_timesort",
   "core_course_get_contents",
-  "mod_assign_get_submission_status",
-  "mod_quiz_get_quizzes_by_courses",
-  "mod_quiz_get_user_quiz_attempts",
-  "mod_quiz_get_user_best_grade",
   "core_completion_get_activities_completion_status",
   "core_calendar_get_calendar_export_token",
   "core_user_get_users_by_field",
   "core_badges_get_user_badges",
   "core_calendar_get_calendar_events",
+  ...quizFunctions,
+  ...assignFunctions,
 ].map((name) => ({ name, version: "demo" }));
-
-const quizDefs = (cid: number) => [
-  { id: cid * 100 + 1, name: "Quiz Avaliativo — Aula 4", timeclose: now - 6 * D, attempts: 2, grade: 1, state: "done" },
-  { id: cid * 100 + 2, name: "Quiz Avaliativo — Aula 5", timeclose: now + 3 * D, attempts: 1, grade: 1, state: "progress" },
-  { id: cid * 100 + 3, name: "Quiz de revisão", timeclose: now - 2 * D, attempts: 0, grade: 2, state: "none" },
-  { id: cid * 100 + 4, name: "Simulado VA2", timeclose: now + 15 * D, attempts: 3, grade: 2, state: "none" },
-];
 
 // Materiais publicados ao longo do semestre. A 101 nomeia as seções por VA; as outras usam semanas
 // (o ciclo sai da data de publicação).
@@ -181,10 +174,28 @@ function contents(cid: number) {
   return [geral, ...weeks];
 }
 
-/** courseids[0], courseids[1]… do corpo da requisição. */
-const courseIds = (p: URLSearchParams) => [...p.keys()].filter((k) => k.startsWith("courseids[")).map((k) => Number(p.get(k)));
+type AssignCourses = { courses: { id: number; assignments: Record<string, unknown>[] }[] };
+
+/** Provas e entregas do quadro de notas viram tarefas com prazo, para o painel saber quando aconteceram. */
+function withGradebookAssigns(r: AssignCourses): AssignCourses {
+  return {
+    courses: r.courses.map((c) => ({
+      ...c,
+      assignments: [
+        ...c.assignments,
+        ...(items[c.id] ?? []).flatMap(([name, , , due], i) =>
+          due === undefined || !(isExamName(name) || i % 2 === 0) ? [] : [{ id: c.id * 100 + i, cmid: c.id * 100 + i, course: c.id, name, duedate: now + due * D, intro: "" }],
+        ),
+      ],
+    })),
+  };
+}
 
 function respond(fn: string, p: URLSearchParams): unknown {
+  if (fn.startsWith("mod_quiz_")) return quizRespond(fn, p, current.map((c) => c.id));
+  const assignResult = assignRespond(fn, p, events);
+  if (fn === "mod_assign_get_assignments") return withGradebookAssigns(assignResult as AssignCourses);
+  if (assignResult !== undefined) return assignResult;
   switch (fn) {
     case "core_webservice_get_site_info":
       return { sitename: "AVA (demonstração)", siteurl: "", userid: 1, release: "5.1.4 (Build: demo)", fullname: "MARIA DEMONSTRAÇÃO SILVA", username: "2024100123", userpictureurl: "https://avagrad.unievangelica.edu.br/theme/image.php/snap/core/1/u/f1", functions };
@@ -201,60 +212,8 @@ function respond(fn: string, p: URLSearchParams): unknown {
       return gradeItems(Number(p.get("courseid")));
     case "core_calendar_get_action_events_by_timesort":
       return { events };
-    case "mod_assign_get_assignments": {
-      return {
-        courses: courseIds(p).map((cid) => (
-          {
-            id: cid,
-            assignments: [
-              ...events
-                .filter((e) => e.course.id === cid && e.modulename === "assign")
-                .map((e) => ({ id: e.id, cmid: e.id, course: cid, name: e.activityname, duedate: e.timesort, intro: "<p>Descrição da tarefa de exemplo.</p>" })),
-              // Atividades do quadro de notas com prazo (provas e entregas), para o painel saber quando foram.
-              ...(items[cid] ?? []).flatMap(([name, , , due], i) =>
-                due === undefined || !(isExamName(name) || i % 2 === 0) ? [] : [{ id: cid * 100 + i, cmid: cid * 100 + i, course: cid, name, duedate: now + due * D, intro: "" }],
-              ),
-            ],
-          }
-        )),
-      };
-    }
     case "core_course_get_contents":
       return contents(Number(p.get("courseid")));
-    case "mod_assign_get_submission_status": {
-      const id = Number(p.get("assignid"));
-      const ev = events.find((e) => e.id === id);
-      const submitted = id % 3 !== 0;
-      return {
-        lastattempt: {
-          submission: { status: submitted ? "submitted" : ev && ev.timesort > now ? "draft" : "new", timemodified: now - 3 * D },
-          gradingstatus: submitted && id % 2 ? "graded" : "notgraded",
-          submissionsenabled: true,
-        },
-        feedback:
-          submitted && id % 2
-            ? {
-                gradefordisplay: '1,70 / 2,00 <i class="icon fa fa-check text-success" title="Aprovado" aria-label="Aprovado"></i>',
-                plugins: [{ type: "comments", name: "Comentários", editorfields: [{ name: "comments", text: "<p>Bom trabalho! Faltou detalhar os <b>critérios de aceitação</b>.</p>" }] }],
-              }
-            : undefined,
-      };
-    }
-    case "mod_quiz_get_quizzes_by_courses": {
-      return { quizzes: courseIds(p).flatMap((cid) => quizDefs(cid).map((q) => ({ ...q, coursemodule: q.id, course: cid, timeopen: 0, timelimit: 1800, sumgrades: 10, decimalpoints: 2, visible: true }))) };
-    }
-    case "mod_quiz_get_user_quiz_attempts": {
-      const q = Object.values(current).flatMap((c) => quizDefs(c.id)).find((x) => x.id === Number(p.get("quizid")));
-      if (!q || q.state === "none") return { attempts: [] };
-      return {
-        attempts: [
-          { id: 1, attempt: 1, state: "finished", timestart: now - 8 * D, timefinish: now - 8 * D + 900, sumgrades: 6 },
-          ...(q.state === "progress" ? [{ id: 2, attempt: 2, state: "inprogress", timestart: now - 3600, timefinish: 0, sumgrades: null }] : []),
-        ],
-      };
-    }
-    case "mod_quiz_get_user_best_grade":
-      return Number(p.get("quizid")) % 2 ? { hasgrade: true, grade: 0.8, gradetopass: 0.6 } : { hasgrade: false };
     case "core_completion_get_activities_completion_status":
       return {
         statuses: [1, 2, 3, 4].map((cmid) => ({ cmid, modname: "resource", instance: cmid, state: cmid <= 2 ? 1 : 0, timecompleted: cmid <= 2 ? now - cmid * D : 0, hascompletion: true, uservisible: true })),
@@ -303,6 +262,10 @@ export function installDemo() {
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (url.includes("/webservice/upload.php") && init?.body instanceof FormData) {
+      await new Promise((r) => setTimeout(r, 300));
+      return new Response(JSON.stringify(demoUpload(init.body)), { headers: { "Content-Type": "application/json" } });
+    }
     if (!url.includes("/webservice/rest/server.php")) return realFetch(input, init);
     const p = new URLSearchParams(String(init?.body ?? ""));
     await new Promise((r) => setTimeout(r, 150 + Math.random() * 250));

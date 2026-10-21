@@ -213,9 +213,11 @@ function heatCard(events: ActionEvent[]) {
 
 type CourseExam = Exam & { course: Course };
 
-/** Nome do ciclo n como o AVA chama (VA1, Fase 1…), pela primeira disciplina que segue o modelo. */
+/** Nome do ciclo n como a maioria das disciplinas chama (VA1, Fase 1…). */
 function cycleName(n: number, stats: CourseStats[]) {
-  return stats.find((s) => s.cycles)?.cycles!.cycles[n - 1]?.label ?? `Ciclo ${n}`;
+  const labels = stats.map((s) => s.cycles?.cycles[n - 1]?.label).filter((l): l is string => !!l);
+  if (!labels.length) return `Ciclo ${n}`;
+  return labels.reduce((best, l) => (labels.filter((x) => x === l).length > labels.filter((x) => x === best).length ? l : best), labels[0]);
 }
 
 /** Ciclo em andamento na maioria das disciplinas. */

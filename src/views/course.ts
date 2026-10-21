@@ -146,7 +146,7 @@ export async function courseView(id: number, rid: number) {
               h(
                 "div",
                 { class: "event-body" },
-                h("div", { class: "event-title" }, avaTitle(a.name, assignUrl(a))),
+                h("div", { class: "event-title" }, h("a", { href: `#/disciplina/${id}/tarefa/${a.id}`, class: "event-link" }, a.name, " →")),
                 a.intro && h("div", { class: "muted small clamp" }, stripHtml(a.intro)),
                 assignSlots.get(a.id),
               ),
@@ -172,7 +172,7 @@ export async function courseView(id: number, rid: number) {
               h(
                 "div",
                 { class: "event-body" },
-                h("div", { class: "event-title" }, avaTitle(q.name, quizUrl(q))),
+                h("div", { class: "event-title" }, h("a", { href: `#/disciplina/${id}/questionario/${q.id}`, class: "event-link" }, q.name, " →")),
                 h(
                   "div",
                   { class: "muted small" },
@@ -394,7 +394,7 @@ function assignStatus(a: Assignment, st: SubmissionStatus, now: number): HTMLEle
   // Ainda dá para enviar: já abriu e não passou da data de corte (sem corte, o Moodle aceita atraso a qualquer momento).
   const canSend =
     la?.submissionsenabled !== false && sub?.status !== "submitted" && (!a.allowsubmissionsfromdate || a.allowsubmissionsfromdate <= now) && (!a.cutoffdate || a.cutoffdate > now);
-  if (canSend) out.push(avaAction(sub?.status === "draft" ? "Enviar rascunho no AVA" : "Enviar no AVA", assignUrl(a)));
+  if (canSend) out.push(appAction(sub?.status === "draft" ? "Enviar rascunho" : "Enviar", `#/disciplina/${a.course}/tarefa/${a.id}`));
 
   const grade = cleanGradeHtml(st.feedback?.gradefordisplay).text;
   if (grade && grade !== "-") out.push(h("span", { class: "chip grade" }, `Nota ${grade}`));
@@ -420,8 +420,8 @@ async function quizStatus(q: Quiz, uid: number, now: number, o: { refresh: boole
 
   const isOpen = (!q.timeopen || q.timeopen <= now) && (!q.timeclose || q.timeclose > now);
   const left = !q.attempts || attempts.filter((a) => a.state !== "abandoned").length < q.attempts;
-  if (open) out.push(avaAction("Continuar no AVA", quizUrl(q)));
-  else if (isOpen && left) out.push(avaAction(finished.length ? "Nova tentativa no AVA" : "Fazer no AVA", quizUrl(q)));
+  if (open) out.push(appAction("Continuar tentativa", `#/disciplina/${q.course}/questionario/${q.id}/tentativa/${open.id}`));
+  else if (isOpen && left) out.push(appAction(finished.length ? "Nova tentativa" : "Fazer", `#/disciplina/${q.course}/questionario/${q.id}`));
 
   if (finished.length && state.available.has("mod_quiz_get_user_best_grade")) {
     const best = await api().quizBestGrade(q.id, uid, o);
@@ -457,7 +457,6 @@ function attemptHistory(q: Quiz, attempts: QuizAttempt[]) {
     const m = Math.round((a.timefinish - a.timestart) / 60);
     return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
   };
-  const base = state.client!.baseUrl;
   return h(
     "details",
     { class: "feedback attempts" },
@@ -483,7 +482,7 @@ function attemptHistory(q: Quiz, attempts: QuizAttempt[]) {
                 h("td", {}, h("span", { class: `chip ${cls}` }, label)),
                 h("td", {}, a.timestart ? fmtDateTime(a.timestart) : "–", h("span", { class: "muted" }, ` · ${dur(a)}`)),
                 h("td", { class: "num", "data-tip": a.sumgrades === null ? "O professor escondeu a nota desta tentativa" : "" }, grade(a)),
-                h("td", {}, a.state === "finished" ? h("a", { href: `${base}/mod/quiz/review.php?attempt=${a.id}`, target: "_blank", rel: "noreferrer" }, "Revisar ↗") : ""),
+                h("td", {}, a.state === "finished" ? h("a", { href: `#/disciplina/${q.course}/questionario/${q.id}/tentativa/${a.id}` }, "Revisar →") : ""),
               );
             }),
         ),
@@ -492,16 +491,8 @@ function attemptHistory(q: Quiz, attempts: QuizAttempt[]) {
   );
 }
 
-const assignUrl = (a: Assignment) => `${state.client!.baseUrl}/mod/assign/view.php?id=${a.cmid}`;
-const quizUrl = (q: Quiz) => `${state.client!.baseUrl}/mod/quiz/view.php?id=${q.coursemodule}`;
-
-/** Título que abre a atividade no AVA, em outra aba. */
-function avaTitle(name: string, url: string) {
-  return h("a", { href: url, target: "_blank", rel: "noreferrer", class: "event-link", title: "Abrir no AVA" }, name, h("span", { class: "ext" }, " ↗"));
-}
-
-/** Botão de ação que leva para a atividade no AVA (o NeoAVA é só leitura: envios e tentativas são feitos lá). */
-function avaAction(label: string, url: string) {
-  return h("a", { href: url, target: "_blank", rel: "noreferrer", class: "button ava-action" }, `${label} ↗`);
+/** Botão de ação que leva para a tela da atividade no app (questionário ou tarefa). */
+function appAction(label: string, href: string) {
+  return h("a", { href, class: "button ava-action" }, `${label} →`);
 }
 

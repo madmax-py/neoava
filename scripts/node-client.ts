@@ -14,8 +14,7 @@ class FileCache implements Cache {
     } catch {}
   }
   get(key: string) {
-    const e = this.#data[key];
-    return e && Date.now() < e.exp ? e.v : undefined;
+    return this.#data[key]; // o cliente ignora entradas vencidas (sem staleWhileRevalidate)
   }
   set(key: string, v: unknown, ttl: number) {
     this.#data[key] = { v, exp: Date.now() + ttl * 1000 };

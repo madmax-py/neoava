@@ -1,7 +1,7 @@
 // Wrappers tipados das funções de consulta. Os tipos cobrem só os campos usados aqui;
 // o Moodle devolve mais coisas.
 
-import type { CallOptions, MoodleClient } from "./client";
+import { MoodleError, type CallOptions, type MoodleClient, type UploadFile } from "./client";
 import { cleanGradeHtml, stripHtml } from "../format";
 
 export interface SiteInfo {
@@ -72,6 +72,16 @@ export interface CalendarEvent {
   timestart: number;
 }
 
+export interface MoodleFile {
+  filename: string;
+  filepath?: string;
+  filesize?: number;
+  fileurl: string;
+  timemodified?: number;
+  mimetype?: string;
+  isexternalfile?: boolean;
+}
+
 export interface Assignment {
   id: number;
   cmid: number;
@@ -84,6 +94,20 @@ export interface Assignment {
   cutoffdate?: number;
   allowsubmissionsfromdate?: number;
   intro?: string;
+  introattachments?: MoodleFile[];
+  /** 1 = envio fica como rascunho até "Enviar para avaliação"; 0 = salvar já envia. */
+  submissiondrafts?: number;
+  /** 1 = sem envio pelo AVA (entrega presencial etc.). */
+  nosubmissions?: number;
+  requiresubmissionstatement?: number;
+  /** Texto da declaração de autoria (quando exigida). */
+  submissionstatement?: string;
+  teamsubmission?: number;
+  /** Tempo limite em segundos (Moodle 4+; 0 = sem). */
+  timelimit?: number;
+  maxattempts?: number;
+  /** Configuração dos tipos de envio: plugin "file"/"onlinetext", name "enabled"/"maxfilesubmissions"… */
+  configs?: { plugin: string; subtype: string; name: string; value: string }[];
 }
 
 export interface ActionEvent {
@@ -134,20 +158,56 @@ export interface CourseSection {
   modules: CourseModule[];
 }
 
+export interface SubmissionPlugin {
+  type: string;
+  name: string;
+  fileareas?: { area: string; files?: MoodleFile[] }[];
+  editorfields?: { name: string; description?: string; text: string; format?: number }[];
+}
+
+export interface Submission {
+  id: number;
+  /** new, draft, submitted, reopened */
+  status: string;
+  attemptnumber?: number;
+  timecreated?: number;
+  timemodified?: number;
+  /** Tarefa com tempo: quando o envio foi iniciado. */
+  timestarted?: number;
+  plugins?: SubmissionPlugin[];
+}
+
 export interface SubmissionStatus {
   lastattempt?: {
-    submission?: { status: string; timemodified?: number };
-    teamsubmission?: { status: string; timemodified?: number };
+    submission?: Submission;
+    teamsubmission?: Submission;
     gradingstatus?: string;
     graded?: boolean;
     extensionduedate?: number;
     submissionsenabled?: boolean;
+    locked?: boolean;
+    /** Pode criar/editar o envio agora. */
+    canedit?: boolean;
+    /** Pode clicar em "Enviar para avaliação" (há rascunho). */
+    cansubmit?: boolean;
+    timelimit?: number;
+    submissiongroupmemberswhoneedtosubmit?: number[];
   };
   feedback?: {
     gradefordisplay?: string;
     gradeddate?: number;
-    plugins?: { type: string; name: string; editorfields?: { name: string; text: string; format?: number }[] }[];
+    plugins?: SubmissionPlugin[];
   };
+  previousattempts?: { attemptnumber: number; submission?: Submission }[];
+  assignmentdata?: { attachments?: { intro?: MoodleFile[]; activity?: MoodleFile[] }; activity?: string };
+}
+
+/** Aviso que o Moodle devolve em vez de erro (save/submit de tarefa). */
+export interface MoodleWarning {
+  item?: string;
+  itemid?: number;
+  warningcode?: string;
+  message: string;
 }
 
 export interface Quiz {
@@ -166,6 +226,9 @@ export interface Quiz {
   grademethod?: number;
   decimalpoints?: number;
   visible?: boolean;
+  /** "free" (qualquer página) ou "sequential" (só a página atual, sem voltar). */
+  navmethod?: string;
+  intro?: string;
 }
 
 export interface QuizAttempt {
@@ -176,6 +239,65 @@ export interface QuizAttempt {
   timefinish: number;
   /** Pontos brutos (escala sumgrades do quiz); null se as opções de revisão escondem a nota. */
   sumgrades: number | null;
+  /** Página em que a tentativa está (0 = primeira). */
+  currentpage?: number;
+  /** Ordem das questões: números dos slots, com 0 marcando o fim de cada página (ex.: "1,2,0,3,0"). */
+  layout?: string;
+  timemodified?: number;
+}
+
+export interface QuizAccess {
+  canattempt: boolean;
+  canreviewmyattempts: boolean;
+  /** Descrição das regras (tempo limite, senha, rede, Safe Exam Browser…). */
+  accessrules: string[];
+  activerulenames: string[];
+  /** Motivos que impedem entrar no questionário agora. */
+  preventaccessreasons: string[];
+}
+
+export interface AttemptAccess {
+  /** Hora em que a tentativa expira (0/ausente = sem tempo limite). */
+  endtime?: number;
+  isfinished: boolean;
+  ispreflightcheckrequired?: boolean;
+  preventnewattemptreasons: string[];
+}
+
+/** Uma questão como o Moodle devolve: o HTML já renderizado, com os campos do formulário. */
+export interface QuizQuestion {
+  slot: number;
+  type: string;
+  page: number;
+  html: string;
+  /** Número exibido ("1", "2"…); vazio em blocos de descrição. */
+  number?: number;
+  questionnumber?: string;
+  flagged: boolean;
+  /** Estado interno: todo, complete, invalid, gradedright, gradedwrong, gradedpartial… */
+  state?: string;
+  /** Texto do estado ("Ainda não respondida", "Correta"…). */
+  status?: string;
+  mark?: string;
+  maxmark?: number;
+  sequencecheck?: number;
+  blockedbyprevious?: boolean;
+}
+
+export interface AttemptData {
+  attempt: QuizAttempt;
+  messages: string[];
+  /** Próxima página, ou -1 se esta é a última. */
+  nextpage: number;
+  questions: QuizQuestion[];
+}
+
+export interface AttemptReview {
+  grade: string;
+  attempt: QuizAttempt;
+  /** Linhas do resumo (Iniciado em, Concluída em, Tempo, Notas, Feedback…), com HTML. */
+  additionaldata: { id: string; title: string; content: string }[];
+  questions: QuizQuestion[];
 }
 
 export interface CompletionStatus {
@@ -212,6 +334,29 @@ export interface UserProfile {
 }
 
 const MIN = 60;
+
+/**
+ * save/submit de tarefa não lançam erro: devolvem uma lista de avisos (ex.: "envio vazio", "fora do prazo").
+ * Aviso aqui significa que NADA foi gravado, então vira erro.
+ */
+const okOrThrow =
+  (fn: string) =>
+  <T>(r: T): T => {
+    const list = Array.isArray(r) ? (r as MoodleWarning[]) : ((r as { warnings?: MoodleWarning[] })?.warnings ?? []);
+    if (list.length) throw new MoodleError(list.map((w) => w.message).join(" "), list[0].warningcode ?? "warning", fn);
+    if (r && typeof r === "object" && "status" in r && (r as { status: unknown }).status === false) throw new MoodleError("O AVA recusou a operação.", "statusfalse", fn);
+    return r;
+  };
+
+/** Par nome → valor de um campo do formulário da questão, no formato que o Moodle espera. */
+export interface FormPair {
+  name: string;
+  value: string;
+}
+
+/** Dados de pré-verificação (ex.: { quizpassword: "…" } para quiz com senha). */
+export type Preflight = Record<string, string>;
+const preflight = (p?: Preflight) => (p ? Object.entries(p).map(([name, value]) => ({ name, value })) : undefined);
 
 /** Campos formatados do quadro de notas podem trazer HTML (ícones de aprovado/reprovado). */
 function cleanItem(i: GradeItem): GradeItem {
@@ -262,6 +407,54 @@ export function createApi(c: MoodleClient) {
     submissionStatus: (assignid: number, o?: CallOptions) =>
       c.call<SubmissionStatus>("mod_assign_get_submission_status", { assignid }, { ttlSeconds: 15 * MIN, ...o }),
 
+    // ---------- Escrita (enviar tarefa). Cada uma exige allowWrite; a tela confirma o envio para avaliação. ----------
+
+    /** Grava arquivos na área de rascunho. Nada é entregue até saveSubmission usar o itemid. */
+    uploadDraft: (files: UploadFile[], itemid = 0) => c.uploadDraft(files, itemid, { allowWrite: true }),
+
+    /** Área de rascunho vazia (para o texto online, ou para limpar todos os arquivos). */
+    newDraftArea: () =>
+      c.call<{ itemid: number }>("core_files_get_unused_draft_itemid", {}, { allowWrite: true }).then((r) => r.itemid),
+
+    /** Tarefa com tempo limite: inicia o envio (o tempo começa a correr). */
+    startSubmission: (assignid: number) =>
+      c.call<{ submissionid: number; warnings?: MoodleWarning[] }>("mod_assign_start_submission", { assignid }, { allowWrite: true }).then(okOrThrow("mod_assign_start_submission")),
+
+    /**
+     * Salva o envio. Os arquivos da área de rascunho `files` SUBSTITUEM os do envio (por isso os já enviados
+     * precisam ir junto). Se a tarefa não usa rascunho (submissiondrafts = 0), salvar já entrega.
+     */
+    saveSubmission: (assignmentid: number, data: { files?: number; text?: { html: string; itemid: number } }) =>
+      c
+        .call<MoodleWarning[] | { warnings?: MoodleWarning[] }>(
+          "mod_assign_save_submission",
+          {
+            assignmentid,
+            plugindata: {
+              files_filemanager: data.files,
+              onlinetext_editor: data.text ? { text: data.text.html, format: 1, itemid: data.text.itemid } : undefined,
+            },
+          },
+          { allowWrite: true },
+        )
+        .then(okOrThrow("mod_assign_save_submission")),
+
+    /** "Enviar para avaliação": tira o envio de rascunho. Depois disso só o professor reabre. */
+    submitForGrading: (assignmentid: number, acceptsubmissionstatement: boolean) =>
+      c
+        .call<MoodleWarning[] | { warnings?: MoodleWarning[] }>(
+          "mod_assign_submit_for_grading",
+          { assignmentid, acceptsubmissionstatement },
+          { allowWrite: true },
+        )
+        .then(okOrThrow("mod_assign_submit_for_grading")),
+
+    /** Apaga o conteúdo do envio (arquivos e texto). */
+    removeSubmission: (assignid: number, userid: number) =>
+      c
+        .call<{ status: boolean; warnings?: MoodleWarning[] }>("mod_assign_remove_submission", { assignid, userid }, { allowWrite: true })
+        .then(okOrThrow("mod_assign_remove_submission")),
+
     quizzes: (courseids: number[], o?: CallOptions) =>
       c
         .call<{ quizzes: Quiz[] }>("mod_quiz_get_quizzes_by_courses", { courseids }, { ttlSeconds: 60 * MIN, ...o })
@@ -284,6 +477,61 @@ export function createApi(c: MoodleClient) {
         { ttlSeconds: 20 * MIN, ...o },
       ),
 
+    quizAccess: (quizid: number, o?: CallOptions) =>
+      c.call<QuizAccess>("mod_quiz_get_quiz_access_information", { quizid }, { ttlSeconds: 5 * MIN, ...o }),
+
+    attemptAccess: (quizid: number, attemptid: number, o?: CallOptions) =>
+      c.call<AttemptAccess>("mod_quiz_get_attempt_access_information", { quizid, attemptid }, { ttlSeconds: 5 * MIN, ...o }),
+
+    quizQtypes: (quizid: number, o?: CallOptions) =>
+      c
+        .call<{ questiontypes: string[] }>("mod_quiz_get_quiz_required_qtypes", { quizid }, { ttlSeconds: 60 * MIN, ...o })
+        .then((r) => r.questiontypes),
+
+    /**
+     * Questões de uma página de uma tentativa em andamento. Só lê: não salva nada, não muda de página.
+     * Nunca vai para o cache (a tentativa muda a cada resposta).
+     */
+    attemptData: (attemptid: number, page: number, pre?: Preflight) =>
+      c.call<AttemptData>("mod_quiz_get_attempt_data", { attemptid, page, preflightdata: preflight(pre) }, { noStore: true }),
+
+    /** Situação de cada questão antes de enviar (sem o HTML). */
+    attemptSummary: (attemptid: number, pre?: Preflight) =>
+      c
+        .call<{ questions: QuizQuestion[] }>("mod_quiz_get_attempt_summary", { attemptid, preflightdata: preflight(pre) }, { noStore: true })
+        .then((r) => r.questions),
+
+    // ---------- Escrita (fazer o questionário). Cada uma exige allowWrite; a tela confirma iniciar e enviar. ----------
+
+    /** Abre uma tentativa nova. Conta no limite de tentativas e o tempo começa a correr. */
+    startAttempt: (quizid: number, pre?: Preflight) =>
+      c
+        .call<{ attempt: QuizAttempt }>("mod_quiz_start_attempt", { quizid, preflightdata: preflight(pre) }, { allowWrite: true })
+        .then((r) => r.attempt),
+
+    /** Salvamento automático (como o do AVA): grava as respostas sem "avançar" a questão. */
+    saveAttempt: (attemptid: number, data: FormPair[], pre?: Preflight) =>
+      c.call<{ status: boolean }>("mod_quiz_save_attempt", { attemptid, data, preflightdata: preflight(pre) }, { allowWrite: true }),
+
+    /**
+     * Salva as respostas da página (como o botão "Próxima página" do AVA).
+     * Com finish = true, ENVIA a tentativa para correção — não tem volta.
+     */
+    processAttempt: (attemptid: number, data: FormPair[], finish: boolean, pre?: Preflight, timeup = false) =>
+      c.call<{ state: string }>(
+        "mod_quiz_process_attempt",
+        { attemptid, data, finishattempt: finish, timeup, preflightdata: preflight(pre) },
+        { allowWrite: true },
+      ),
+
+    /** Registra a página atual da tentativa (necessário para avançar na navegação sequencial). */
+    viewAttempt: (attemptid: number, page: number, pre?: Preflight) =>
+      c.call<{ status: boolean }>("mod_quiz_view_attempt", { attemptid, page, preflightdata: preflight(pre) }, { allowWrite: true }),
+
+    /** Revisão de uma tentativa finalizada (todas as páginas). O que aparece depende das opções de revisão do quiz. */
+    attemptReview: (attemptid: number, o?: CallOptions) =>
+      c.call<AttemptReview>("mod_quiz_get_attempt_review", { attemptid, page: -1 }, { ttlSeconds: 30 * MIN, ...o }),
+
     completion: (courseid: number, userid: number, o?: CallOptions) =>
       c
         .call<{ statuses: CompletionStatus[] }>(
@@ -305,12 +553,12 @@ export function createApi(c: MoodleClient) {
      * (o get_action_events só traz o que ainda tem ação pendente).
      */
     calendarEvents: (courseids: number[], from: number, to: number, o?: CallOptions) => {
-      // Arredonda para a hora cheia para reaproveitar o cache.
-      const h = (t: number) => Math.floor(t / 3600) * 3600;
+      // Arredonda para o dia (UTC) para a chave do cache valer o dia todo; quem chama filtra pelo intervalo exato.
+      const day = (t: number) => Math.floor(t / 86400) * 86400;
       return c
         .call<{ events: CalendarEvent[] }>(
           "core_calendar_get_calendar_events",
-          { events: { courseids }, options: { userevents: 1, siteevents: 1, timestart: h(from), timeend: h(to) + 3600 } },
+          { events: { courseids }, options: { userevents: 1, siteevents: 1, timestart: day(from), timeend: day(to) + 86400 } },
           { ttlSeconds: 15 * MIN, ...o },
         )
         .then((r) => r.events);
@@ -329,12 +577,13 @@ export function createApi(c: MoodleClient) {
 
     /** Próximos prazos de todas as disciplinas numa única chamada. */
     upcoming: (days = 30, limitnum = 50, o?: CallOptions) => {
-      // Arredonda para a hora cheia para o cache funcionar entre chamadas próximas.
-      const from = Math.floor(Date.now() / 1000 / 3600) * 3600 - 7 * 86400; // inclui atrasados da última semana
+      // Arredonda para o dia (UTC): a chave do cache vale o dia todo (antes mudava a cada hora e o
+      // localStorage enchia de entradas que nunca mais eram lidas).
+      const from = Math.floor(Date.now() / 1000 / 86400) * 86400 - 7 * 86400; // inclui atrasados da última semana
       return c
         .call<{ events: ActionEvent[] }>(
           "core_calendar_get_action_events_by_timesort",
-          { timesortfrom: from, timesortto: from + (days + 7) * 86400, limitnum },
+          { timesortfrom: from, timesortto: from + (days + 8) * 86400, limitnum },
           { ttlSeconds: 15 * MIN, ...o },
         )
         .then((r) => r.events);

@@ -901,3 +901,135 @@ a.button.ava-action:hover { background: var(--accent-wash); filter: none; }
 .attempts .table { font-size: 0.82rem; }
 .attempts .table td:first-child { min-width: 0; }
 .attempts .table td:last-child { white-space: nowrap; }
+
+/* ---------- questionários e tarefas ---------- */
+.notice { background: var(--warn-wash); color: var(--text); border-radius: 0; padding: 10px 14px; margin: 0 0 16px; font-size: 0.9rem; }
+.notice p { margin: 0; }
+.notice ul, .error ul { margin: 6px 0 0; padding-left: 20px; }
+.rules { margin: 12px 0 0; padding-left: 20px; display: grid; gap: 4px; font-size: 0.9rem; }
+.table.kv th { width: 34%; font-size: 0.85rem; color: var(--text-2); border-bottom: 1px solid var(--grid); vertical-align: top; }
+.q-list { display: grid; gap: 16px; }
+.q-list > .card { margin-bottom: 0; }
+.pager { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
+/* dentro da lista de questões o espaço já vem do gap */
+.q-list > .pager { margin: 0; }
+.page-link {
+  display: inline-grid;
+  place-items: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+a.page-link:hover { background: var(--surface-2); text-decoration: none; }
+.page-link.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.page-link.locked { color: var(--muted); }
+
+/* HTML da questão vindo do Moodle (classes com prefixo m-, já limpo) */
+.qhtml { font-size: 0.95rem; overflow-wrap: anywhere; }
+.qhtml p { margin: 0 0 10px; }
+.qhtml img { max-width: 100%; height: auto; border-radius: 0; }
+.qhtml table { border-collapse: collapse; max-width: 100%; display: block; overflow-x: auto; }
+.qhtml td, .qhtml th { border: 1px solid var(--grid); padding: 4px 8px; }
+.qhtml pre { white-space: pre-wrap; background: var(--surface-2); padding: 8px 10px; border-radius: 0; }
+.qhtml fieldset { border: 0; padding: 0; margin: 12px 0 0; min-width: 0; }
+.qhtml legend { font-size: 0.85rem; color: var(--text-2); padding: 0; margin-bottom: 6px; }
+.qhtml .m-accesshide, .qhtml .m-visually-hidden, .qhtml .m-sr-only {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+.qhtml .m-qtext { margin-bottom: 4px; }
+.qhtml .m-answer { display: grid; gap: 6px; }
+.qhtml .m-answer > div {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 8px 10px; border-radius: 0; border: 1px solid var(--grid); background: var(--surface);
+}
+.qhtml .m-answer > div:has(input:checked) { border-color: var(--accent); background: var(--accent-wash); }
+.qhtml .m-answer > div.m-correct, .qhtml .m-answer > div.m-correct:has(input:checked) { border-color: color-mix(in srgb, var(--good) 50%, transparent); background: var(--good-wash); }
+.qhtml .m-answer > div.m-incorrect, .qhtml .m-answer > div.m-incorrect:has(input:checked) { border-color: color-mix(in srgb, var(--bad) 50%, transparent); background: var(--bad-wash); }
+.qhtml .m-answer input { margin-top: 4px; flex: none; }
+.qhtml .m-d-flex { display: flex; gap: 4px; flex-wrap: wrap; min-width: 0; }
+.qhtml .m-answernumber { font-weight: 600; color: var(--text-2); }
+.qhtml input[type="text"], .qhtml input[type="number"], .qhtml select, .qhtml textarea {
+  font: inherit; max-width: 100%; padding: 6px 10px; border-radius: 0; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+}
+.qhtml textarea { width: 100%; }
+.qhtml input:disabled, .qhtml select:disabled, .qhtml textarea:disabled { opacity: 1; cursor: not-allowed; }
+.qhtml .m-outcome, .qhtml .m-specificfeedback, .qhtml .m-generalfeedback, .qhtml .m-rightanswer {
+  margin-top: 12px; padding: 8px 12px; border-radius: 0; background: var(--surface-2); font-size: 0.9rem; color: var(--text-2);
+}
+.qhtml .m-outcome .m-rightanswer, .qhtml .m-outcome .m-specificfeedback, .qhtml .m-outcome .m-generalfeedback { padding: 0; margin: 6px 0 0; }
+.q-mark { font-weight: 700; margin: 0 4px; }
+.q-mark.good { color: var(--good-ink); }
+.q-mark.bad { color: var(--bad-ink); }
+.q-mark.warn { color: var(--warn-ink); }
+
+/* inventário de campos do formulário */
+.fields { margin-top: 16px; border-top: 1px solid var(--grid); padding-top: 10px; font-size: 0.85rem; }
+.fields summary { cursor: pointer; color: var(--accent); }
+.table-wrap { overflow-x: auto; }
+.fields-table { font-size: 0.8rem; }
+.fields-table code { white-space: nowrap; }
+.fields-table tr.hidden-field td { color: var(--muted); }
+
+/* ---------- responder questionário ---------- */
+button.danger { background: var(--bad); border-color: var(--bad); color: var(--on-accent); font-weight: 600; }
+button.danger:hover { filter: brightness(1.08); background: var(--bad); }
+a.button.primary-link { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.notice.info { background: var(--accent-wash); }
+.attempt-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0 8px; }
+.attempt-actions .spacer { flex: 1; }
+.question.editable .m-answer > div { cursor: pointer; }
+.question.editable .m-answer > div:hover { border-color: var(--axis); }
+.question.editable .qhtml input[type="text"], .question.editable .qhtml input[type="number"], .question.editable .qhtml select, .question.editable .qhtml textarea { background: var(--surface); }
+.question.editable .qhtml input:focus, .question.editable .qhtml select:focus, .question.editable .qhtml textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.question .notice { margin: 0 0 12px; }
+.summary-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.summary-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 1px solid var(--grid); border-radius: 0; }
+
+.dialog {
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--text);
+  padding: 22px 22px 18px;
+  width: min(460px, calc(100vw - 32px));
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+}
+.dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+.dialog h2 { font-size: 1.1rem; margin-bottom: 10px; }
+.dialog-body { font-size: 0.9rem; color: var(--text-2); }
+.dialog-body ul { padding-left: 18px; margin: 0; display: grid; gap: 6px; }
+.dialog-body p { margin: 0 0 8px; }
+.dialog-field { margin-top: 12px; display: grid; gap: 6px; }
+.dialog-field .error { margin: 0; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.dialog-check { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; font-size: 0.9rem; cursor: pointer; }
+.dialog-check input { margin-top: 3px; flex: none; }
+
+/* ---------- tarefa: envio de arquivos e texto ---------- */
+.file-list { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 8px; }
+.file-link { overflow-wrap: anywhere; }
+.file-row { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 10px; border: 1px solid var(--grid); border-radius: 0; background: var(--surface); }
+.file-row .file-link { flex: 1; min-width: 0; }
+.file-row .icon-btn { flex: none; }
+.dropzone {
+  display: block; margin: 8px 0 4px; padding: 18px; text-align: center; cursor: pointer;
+  border: 2px dashed var(--axis); border-radius: 0; background: var(--surface-2); color: var(--accent);
+}
+.dropzone:hover, .dropzone.over { border-color: var(--accent); background: var(--accent-wash); }
+.dropzone div { margin-top: 4px; }
+.assign-editor h3 { margin: 16px 0 6px; color: var(--text); }
+.assign-editor h3:first-child { margin-top: 0; }
+.assign-editor textarea {
+  width: 100%; font: inherit; padding: 10px 12px; border-radius: 0; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); resize: vertical;
+}
+.assign-editor textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.editor-foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+.bad-text { color: var(--bad-ink); font-weight: 600; }
+.submitted-text, .feedback-text { padding: 10px 12px; border-radius: 0; background: var(--surface-2); margin: 8px 0; }
