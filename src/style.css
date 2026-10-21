@@ -761,7 +761,9 @@ a.alert:hover { filter: brightness(0.98); }
 .table.kv th { width: 34%; font-size: 0.85rem; color: var(--text-2); border-bottom: 1px solid var(--grid); vertical-align: top; }
 .q-list { display: grid; gap: 16px; }
 .q-list > .card { margin-bottom: 0; }
-.pager { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.pager { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
+/* dentro da lista de questões o espaço já vem do gap */
+.q-list > .pager { margin: 0; }
 .page-link {
   display: inline-grid;
   place-items: center;
