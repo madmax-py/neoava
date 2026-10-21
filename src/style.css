@@ -1059,3 +1059,7 @@ button.loading {
   transition: background 0.3s;
 }
 button.loading:disabled { cursor: progress; }
+
+/* círculo de carregamento dentro do botão (mesma altura da linha de texto, não muda o tamanho do botão) */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner { display: block; margin-inline: auto; width: 1.2em; height: 1.2em; border: 2px solid color-mix(in srgb, currentColor 30%, transparent); border-top-color: currentColor; border-radius: 50%; animation: spin 0.7s linear infinite; }

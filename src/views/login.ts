@@ -7,7 +7,7 @@ import { warmUp } from "../prefetch";
 const app = document.getElementById("app")!;
 
 /**
- * Entra com o token. Com `btn`, o botão continua "Entrando…" (com a barra de progresso) enquanto os dados
+ * Entra com o token. Com `btn`, o botão mostra o círculo de carregamento (e a barra de progresso) enquanto os dados
  * de todas as telas vão para o cache; assim, depois de entrar, cada página abre na hora.
  */
 async function useToken(t: string, btn?: HTMLButtonElement) {
@@ -18,7 +18,7 @@ async function useToken(t: string, btn?: HTMLButtonElement) {
   if (btn) {
     btn.disabled = true;
     btn.classList.add("loading");
-    btn.textContent = "Entrando…";
+    showSpinner(btn);
     btn.style.setProperty("--p", "0");
     try {
       await warmUp((f) => btn.style.setProperty("--p", String(f)));
@@ -96,7 +96,7 @@ export function showTokenScreen(error?: MoodleError) {
               const u = user.value.trim();
               if (!u || !pass.value) return;
               loginBtn.disabled = true;
-              loginBtn.textContent = "Entrando…";
+              showSpinner(loginBtn);
               loginMsg.hidden = true;
               try {
                 const t = await requestToken(__MOODLE_URL__, u, pass.value);
@@ -108,6 +108,7 @@ export function showTokenScreen(error?: MoodleError) {
                   err instanceof MoodleError ? err.message : String(err);
                 loginMsg.hidden = false;
                 loginBtn.disabled = false;
+                loginBtn.removeAttribute("aria-label");
                 loginBtn.textContent = "Entrar";
                 pass.focus();
               }
@@ -186,4 +187,10 @@ export function openDemo() {
 
 export function exitDemo() {
   location.href = location.pathname;
+}
+
+/** Troca o texto do botão por um círculo girando (o leitor de tela continua ouvindo "Entrando"). */
+function showSpinner(btn: HTMLButtonElement) {
+  btn.setAttribute("aria-label", "Entrando");
+  btn.replaceChildren(h("span", { class: "spinner", "aria-hidden": "true" }));
 }
