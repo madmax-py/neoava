@@ -49,7 +49,8 @@ export function stripHtml(html: string): string {
  */
 export function cleanGradeHtml(value: string | null | undefined): { text: string; passed: boolean | null } {
   if (!value) return { text: value ?? "", passed: null };
-  if (!value.includes("<")) return { text: value, passed: null };
+  // Sem HTML, mas pode vir com entidades ("0,00&nbsp;/&nbsp;5,00").
+  if (!value.includes("<")) return { text: value.includes("&") ? stripHtml(value) : value, passed: null };
   let passed: boolean | null = null;
   if (/text-danger|fa-xmark|fa-times|fa-close/.test(value)) passed = false;
   else if (/text-success|fa-check/.test(value)) passed = true;

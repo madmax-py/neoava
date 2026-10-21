@@ -2,7 +2,9 @@
 
 import type { ActionEvent, Assignment, CalendarEvent, Course, CourseModule, CourseSection, GradeItem, Quiz } from "./moodle/api";
 import { api, DAY, ifAvailable, nowS, opts, site, state } from "./state";
-import { accumulate, buildDeadlineIndex, buildMaxIndex, cyclesOf, difficultyOf, examsOf, getPassMark, isCurrent, itemDeadline, type Accumulation, type CycleSummary, type DeadlineIndex, type Difficulty, type Exam, type MaxIndex } from "./grades";
+import { accumulate, buildDeadlineIndex, buildMaxIndex, CYCLE_IN_NAME, cycleSplit, cyclesOf, difficultyOf, examsOf, getPassMark, isCurrent, itemCycles, type Accumulation, type CycleSplit, type CycleSummary, type Difficulty, type Exam, type MaxIndex } from "./grades";
+
+export { cycleSplit, type CycleSplit };
 import { fmtDateTime, fmtRelative, TZ } from "./format";
 import { columnChart, h, modBadge } from "./ui";
 
@@ -32,6 +34,8 @@ export interface CourseStats {
   events: ActionEvent[];
   exams: Exam[];
   difficulty: Difficulty;
+  /** Ciclo (1–3) de cada item do quadro de notas, por id; null = sem como saber. */
+  cycleOfItem: Map<number, number | null>;
 }
 
 /**
@@ -56,21 +60,25 @@ export async function cycleData() {
   );
   const stats: CourseStats[] = base.current.map((course, i) => {
     const acc = accumulate(items[i], idx);
-    const exams = examsOf(items[i], idx, dl);
+    const cycles = cyclesOf(items[i], idx, course);
+    const cycleOfItem = itemCycles(items[i], course, cycles, dl);
+    const exams = examsOf(items[i], idx, dl).map((e) => ({ ...e, cycle: cycleOfItem.get(e.id) ?? null }));
     return {
       course,
       items: items[i],
       acc,
-      cycles: cyclesOf(items[i], idx, course),
+      cycles,
       events: base.events.filter((e) => e.course?.id === course.id),
       exams,
-      difficulty: difficultyOf(exams, acc, passFrac),
+      difficulty: difficultyOf(exams, acc?.pieces ?? [], passFrac),
+      cycleOfItem,
     };
   });
   return { ...base, assigns, quizzes, idx, dl, stats };
 }
 
 export type { MaxIndex };
+
 
 export function courseName(c: Course) {
   return c.displayname || c.fullname;
@@ -313,32 +321,9 @@ export interface Material {
   by: "section" | "date" | "general" | null;
 }
 
-export type CycleSplit = { kind: "exams" | "semester"; ends: [number, number] } | null;
 
-// Só nomes que são ciclo de verdade: "Unidade 2" ou "Etapa 3" nem sempre coincidem com a VA.
-const CYCLE_IN_NAME = /\b(?:VA|FASE|CICLO)\s*0?([1-3])\b|\b([1-3])\s*[ºª°]?\s*(?:VA|FASE|CICLO)\b/i;
 const GENERAL_SECTION = /\b(geral|apresenta[çc][ãa]o|plano de ensino|boas[- ]vindas|informa[çc][õo]es|avisos)\b/i;
 
-/**
- * Onde termina cada ciclo. Preferência: o prazo da última atividade avaliativa de VA1 e de VA2
- * (as provas fecham o ciclo). Sem isso, divide o período da disciplina em três partes iguais.
- */
-export function cycleSplit(course: Course, items: GradeItem[], cycles: CycleSummary | null, dl: DeadlineIndex): CycleSplit {
-  if (cycles) {
-    const ends = cycles.cycles.slice(0, 2).map((c) => {
-      const ds = items.filter((i) => i.categoryid === c.id).map((i) => itemDeadline(i, dl)).filter((d): d is number => d !== null);
-      return ds.length ? Math.max(...ds) : null;
-    });
-    if (ends[0] && ends[1] && ends[0] < ends[1]) return { kind: "exams", ends: [ends[0], ends[1]] };
-  }
-  const start = course.startdate ?? 0;
-  const end = course.enddate ?? 0;
-  if (start && end > start) {
-    const third = (end - start) / 3;
-    return { kind: "semester", ends: [start + third, start + 2 * third] };
-  }
-  return null;
-}
 
 function postedAt(m: CourseModule): number | null {
   const created = (m.contents ?? []).map((c) => c.timecreated || c.timemodified || 0).filter((t) => t > 0);

@@ -352,9 +352,13 @@ export function mean(xs: number[]): number | null {
 // O quadro de notas do AVA é incompleto (muitos professores não lançam tudo), então o painel
 // olha principalmente para as provas: são a melhor pista de dificuldade real na disciplina.
 
-/** Nome de prova: "Prova 1", "P2", "Avaliação escrita", "Exame final"… (simulados e quizzes de revisão não contam). */
-const EXAM_NAME = /\b(provas?|exame|P\s?[1-3]|avalia[çc][ãa]o\s+(escrita|individual|presencial|te[óo]rica|pr[áa]tica|final|bimestral|oficial))\b/i;
-const NOT_EXAM = /\b(simulado|revis[ãa]o|treino|pr[ée]via)\b/i;
+/**
+ * Nome de prova. Na UniEvangélica: "1ª VA - Verificação de Aprendizagem" (também "2ª VA", "3ª VA").
+ * Também aceita "Prova 1", "P2", "Exame", "Avaliação escrita". Não contam: "Atividade Avaliativa"
+ * (trabalhos), simulados, revisões e a "Devolutiva 2º VA" (correção comentada da prova).
+ */
+const EXAM_NAME = /verifica[çc][ãa]o\s+de\s+aprendizagem|\b[1-3]\s*[ªaº°]\s*VA\b|\b(provas?|exame|P\s?[1-3]|avalia[çc][ãa]o\s+(escrita|individual|presencial|te[óo]rica|pr[áa]tica|final|bimestral|oficial))\b/i;
+const NOT_EXAM = /\b(simulado|revis[ãa]o|revisando|treino|pr[ée]via|devolutiva)\b/i;
 
 export function isExam(name: string | null | undefined): boolean {
   return !!name && EXAM_NAME.test(name) && !NOT_EXAM.test(name);
@@ -389,6 +393,8 @@ export interface Exam {
   /** graded = nota lançada · awaiting = já passou e sem nota · upcoming = ainda vai acontecer. */
   state: ExamState;
   categoryid: number | null;
+  /** Ciclo 1–3 (preenchido por quem conhece a estrutura da disciplina). */
+  cycle: number | null;
 }
 
 export function examsOf(items: GradeItem[], idx?: MaxIndex, dl?: DeadlineIndex, now = Date.now() / 1000): Exam[] {
@@ -410,6 +416,7 @@ export function examsOf(items: GradeItem[], idx?: MaxIndex, dl?: DeadlineIndex, 
         due,
         state,
         categoryid: i.categoryid ?? null,
+        cycle: null,
       };
     });
 }
@@ -435,13 +442,13 @@ const EXAM_GAP = 0.15;
  * Dificuldade na disciplina, com peso nas provas: abaixo da média na prova pesa mais que o total,
  * e ir bem nas atividades mas mal na prova também é sinal de alerta.
  */
-export function difficultyOf(exams: Exam[], acc: Accumulation | null, passFrac: number): Difficulty {
+export function difficultyOf(exams: Exam[], pieces: GradedPiece[], passFrac: number): Difficulty {
   const graded = exams.filter((e) => e.pct !== null);
   const examEarned = graded.reduce((a, e) => a + e.earned!, 0);
   const examMax = graded.reduce((a, e) => a + e.max!, 0);
   const exam = examMax > 0 ? Math.min(1, examEarned / examMax) : null;
   const examIds = new Set(exams.map((e) => e.id));
-  const rest = (acc?.pieces ?? []).filter((p) => p.earned !== null && !examIds.has(p.id));
+  const rest = pieces.filter((p) => p.earned !== null && !examIds.has(p.id));
   const restMax = rest.reduce((a, p) => a + p.max, 0);
   const others = restMax > 0 ? Math.min(1, rest.reduce((a, p) => a + Math.min(p.earned!, p.max), 0) / restMax) : null;
   const allMax = examMax + restMax;
@@ -451,7 +458,11 @@ export function difficultyOf(exams: Exam[], acc: Accumulation | null, passFrac: 
   let reason = "Indo bem nas provas";
   if (exam === null) {
     level = "no-exam";
-    reason = exams.some((e) => e.state === "awaiting") ? "Prova feita, nota ainda não lançada" : "Nenhuma prova corrigida ainda";
+    reason = !exams.length ? "Sem prova no quadro de notas" : exams.some((e) => e.state === "awaiting")
+        ? "Prova feita, nota ainda não lançada"
+        : exams.some((e) => e.state === "upcoming")
+          ? "Prova ainda não aconteceu"
+          : "Prova ainda sem nota";
   } else if (exam < passFrac) {
     level = "bad";
     reason = "Prova abaixo da média";
@@ -463,6 +474,55 @@ export function difficultyOf(exams: Exam[], acc: Accumulation | null, passFrac: 
     reason = "Prova perto do limite";
   }
   return { exam, others, overall, examsGraded: graded.length, level, reason };
+}
+
+
+// ---------- Ciclo de cada item / material ----------
+
+export type CycleSplit = { kind: "exams" | "semester"; ends: [number, number] } | null;
+
+// Só nomes que são ciclo de verdade: "Unidade 2" ou "Etapa 3" nem sempre coincidem com a VA.
+export const CYCLE_IN_NAME = /\b(?:VA|FASE|CICLO)\s*0?([1-3])\b|\b([1-3])\s*[ºª°]?\s*(?:VA|FASE|CICLO)\b/i;
+
+/**
+ * Onde termina cada ciclo. Preferência: o prazo da última atividade avaliativa de VA1 e de VA2
+ * (as provas fecham o ciclo). Sem isso, divide o período da disciplina em três partes iguais.
+ */
+export function cycleSplit(course: Course, items: GradeItem[], cycles: CycleSummary | null, dl: DeadlineIndex): CycleSplit {
+  if (cycles) {
+    const ends = cycles.cycles.slice(0, 2).map((c) => {
+      const ds = items.filter((i) => i.categoryid === c.id).map((i) => itemDeadline(i, dl)).filter((d): d is number => d !== null);
+      return ds.length ? Math.max(...ds) : null;
+    });
+    if (ends[0] && ends[1] && ends[0] < ends[1]) return { kind: "exams", ends: [ends[0], ends[1]] };
+  }
+  const start = course.startdate ?? 0;
+  const end = course.enddate ?? 0;
+  if (start && end > start) {
+    const third = (end - start) / 3;
+    return { kind: "semester", ends: [start + third, start + 2 * third] };
+  }
+  return null;
+}
+
+/**
+ * Ciclo de cada item de nota: pela categoria VA1–VA3; senão pelo nome ("FASE 02 - ENTREGA",
+ * "2ª VA"); senão pelo prazo × fim de cada ciclo. Itens soltos (fora das categorias) costumam ser do próximo ciclo.
+ */
+export function itemCycles(items: GradeItem[], course: Course, cycles: CycleSummary | null, dl: DeadlineIndex) {
+  const split = cycleSplit(course, items, cycles, dl);
+  const out = new Map<number, number | null>();
+  for (const i of items) {
+    if (i.itemtype !== "mod" && i.itemtype !== "manual") continue;
+    const byCat = cycles?.cycles.findIndex((c) => c.id === i.categoryid) ?? -1;
+    const byName = CYCLE_IN_NAME.exec(i.itemname ?? "");
+    const due = itemDeadline(i, dl);
+    out.set(
+      i.id,
+      byCat >= 0 ? byCat + 1 : byName ? Number(byName[1] ?? byName[2]) : due && split ? (due <= split.ends[0] ? 1 : due <= split.ends[1] ? 2 : 3) : null,
+    );
+  }
+  return out;
 }
 
 // ---------- Preferência: média mínima de aprovação ----------

@@ -3,7 +3,7 @@
 
 import { closedRow, cycleData, courseName, deadlineStrip, eventRow, isLate, recentClosed, weeksGrid, type ClosedItem, type CourseStats } from "../data";
 import { DAY, nowS, site, state } from "../state";
-import { fmtNum, getPassMark, semesterOf, setPassMark, type Exam } from "../grades";
+import { difficultyOf, fmtNum, getPassMark, semesterOf, setPassMark, type Difficulty, type Exam } from "../grades";
 import { fmtDateTime, fmtRelative } from "../format";
 import { avatar, firstName, shell } from "../layout";
 import type { ActionEvent, Course } from "../moodle/api";
@@ -78,7 +78,7 @@ export async function dashboard(id: number) {
       span(overdueCard(late, closedLate), 5),
       span(todoCard(d.events, upcoming), 7),
       span(heatCard(d.events), 5),
-      span(examsCard(exams), 12),
+      span(examsCard(exams, stats), 12),
     ),
   );
 }
@@ -92,9 +92,61 @@ function span(el: HTMLElement, n: number) {
 const LEVEL_ORDER = { bad: 0, warn: 1, ok: 2, "no-exam": 3 } as const;
 const LEVEL_CHIP = { bad: "bad", warn: "warn", ok: "good", "no-exam": "" } as const;
 
-/** Provas × demais atividades, por disciplina: a nota da prova pesa mais que o total. */
+/** Dificuldade de uma disciplina olhando só um ciclo (ou o semestre todo, com cycle = null). */
+function difficultyIn(s: CourseStats, cycle: number | null, pass: number): Difficulty {
+  if (cycle === null) return s.difficulty;
+  const exams = s.exams.filter((e) => e.cycle === cycle);
+  const pieces = (s.acc?.pieces ?? []).filter((p) => s.cycleOfItem.get(p.id) === cycle);
+  return difficultyOf(exams, pieces, pass / 10);
+}
+
+/** Provas × demais atividades, por disciplina e por ciclo: a nota da prova pesa mais que o total. */
 function difficultyCard(stats: CourseStats[], pass: number) {
-  const rows = [...stats].sort((a, b) => LEVEL_ORDER[a.difficulty.level] - LEVEL_ORDER[b.difficulty.level] || (a.difficulty.exam ?? 2) - (b.difficulty.exam ?? 2));
+  const gradedIn = (n: number) => stats.some((s) => s.exams.some((e) => e.cycle === n && e.state === "graded"));
+  const options = [...[1, 2, 3].map((n) => ({ key: n as number | null, label: cycleName(n, stats) })), { key: null, label: "Semestre" }];
+  // Abre no ciclo mais recente que já tem prova corrigida (o atual costuma ainda não ter).
+  let sel = [3, 2, 1].find(gradedIn) ?? currentCycle(stats) ?? null;
+  const cur = currentCycle(stats);
+  const tabs = h("div", { class: "seg-filter", role: "group", "aria-label": "Mostrar dificuldade do ciclo" });
+  const body = h("div", {});
+  const render = () => {
+    tabs.replaceChildren(
+      ...options.map((o) =>
+        h(
+          "button",
+          {
+            type: "button",
+            class: o.key === sel ? "active" : "",
+            "aria-pressed": String(o.key === sel),
+            onclick: () => {
+              sel = o.key;
+              render();
+            },
+          },
+          o.label,
+          o.key !== null && o.key === cur && h("span", { class: "dot", title: "ciclo em andamento" }),
+        ),
+      ),
+    );
+    body.replaceChildren(difficultyList(stats, sel, pass));
+  };
+  render();
+  return card(
+    h("div", { class: "card-title-row" }, h("h2", {}, "Onde está mais difícil"), tabs),
+    h("p", { class: "muted small chart-cap" }, `média mínima ${pass * 10}%`),
+    body,
+    h(
+      "p",
+      { class: "note" },
+      "O quadro de notas do AVA costuma estar incompleto, então o alerta olha primeiro para as provas (Verificação de Aprendizagem): prova abaixo da média, perto do limite ou bem abaixo das outras atividades do mesmo ciclo.",
+    ),
+  );
+}
+
+function difficultyList(stats: CourseStats[], cycle: number | null, pass: number) {
+  const rows = stats
+    .map((s) => ({ ...s, df: difficultyIn(s, cycle, pass), examsHere: cycle === null ? s.exams : s.exams.filter((e) => e.cycle === cycle) }))
+    .sort((a, b) => LEVEL_ORDER[a.df.level] - LEVEL_ORDER[b.df.level] || (a.df.exam ?? 2) - (b.df.exam ?? 2));
   const bar = (label: string, v: number | null, cls: string) =>
     h(
       "div",
@@ -103,13 +155,11 @@ function difficultyCard(stats: CourseStats[], pass: number) {
       h("div", { class: "meter" }, v !== null && h("div", { class: `meter-fill ${cls}`, style: `width:${v * 100}%` })),
       h("span", { class: "meter-val" }, pct(v)),
     );
-  return card(
-    h("div", { class: "card-title-row" }, h("h2", {}, "Onde está mais difícil"), h("span", { class: "muted small" }, `média mínima ${pass * 10}%`)),
-    rows.length
+  return rows.length
       ? h(
           "div",
           { class: "diff-list" },
-          rows.map(({ course, difficulty: df, exams }) =>
+          rows.map(({ course, df, examsHere: exams }) =>
             h(
               "div",
               { class: `diff-row lvl-${df.level}` },
@@ -128,13 +178,7 @@ function difficultyCard(stats: CourseStats[], pass: number) {
             ),
           ),
         )
-      : h("p", { class: "empty" }, "Nenhuma disciplina no ciclo."),
-    h(
-      "p",
-      { class: "note" },
-      "O quadro de notas do AVA costuma estar incompleto, então o alerta olha primeiro para as provas: prova abaixo da média, perto do limite ou bem abaixo das outras atividades.",
-    ),
-  );
+      : h("p", { class: "empty" }, "Nenhuma disciplina no ciclo.");
 }
 
 function overdueCard(late: ActionEvent[], closedLate: ClosedItem[]) {
@@ -169,8 +213,73 @@ function heatCard(events: ActionEvent[]) {
 
 type CourseExam = Exam & { course: Course };
 
-/** Situação de cada prova: nota lançada, feita e sem nota, ou ainda por vir. */
-function examsCard(exams: CourseExam[]) {
+/** Nome do ciclo n como o AVA chama (VA1, Fase 1…), pela primeira disciplina que segue o modelo. */
+function cycleName(n: number, stats: CourseStats[]) {
+  return stats.find((s) => s.cycles)?.cycles!.cycles[n - 1]?.label ?? `Ciclo ${n}`;
+}
+
+/** Ciclo em andamento na maioria das disciplinas. */
+function currentCycle(stats: CourseStats[]): number | null {
+  const votes = stats.filter((s) => s.cycles).map((s) => s.cycles!.current + 1);
+  if (!votes.length) return null;
+  return [1, 2, 3].reduce((best, n) => (votes.filter((v) => v === n).length > votes.filter((v) => v === best).length ? n : best), votes[0]);
+}
+
+/** Provas por ciclo (seletor), cada uma com a situação: nota lançada, feita e sem nota, ou ainda por vir. */
+function examsCard(all: CourseExam[], stats: CourseStats[]) {
+  const options: { key: string; label: string; list: CourseExam[] }[] = [
+    ...[1, 2, 3].map((n) => ({ key: String(n), label: cycleName(n, stats), list: all.filter((e) => e.cycle === n) })),
+    ...(all.some((e) => e.cycle === null) ? [{ key: "none", label: "Sem ciclo", list: all.filter((e) => e.cycle === null) }] : []),
+    { key: "all", label: "Todos", list: all },
+  ];
+  const cur = currentCycle(stats);
+  let sel = options.find((o) => o.key === String(cur) && o.list.length) ?? options.find((o) => o.list.length && o.key !== "all") ?? options[options.length - 1];
+
+  const body = h("div", {});
+  const tabs = h("div", { class: "seg-filter", role: "group", "aria-label": "Mostrar provas do ciclo" });
+  const render = () => {
+    tabs.replaceChildren(
+      ...options.map((o) =>
+        h(
+          "button",
+          {
+            type: "button",
+            class: o === sel ? "active" : "",
+            "aria-pressed": String(o === sel),
+            onclick: () => {
+              sel = o;
+              render();
+            },
+          },
+          o.label,
+          o.key === String(cur) && h("span", { class: "dot", title: "ciclo em andamento" }),
+          h("span", { class: "count" }, String(o.list.length)),
+        ),
+      ),
+    );
+    body.replaceChildren(examSummary(sel.list, sel.key === "all" ? "No semestre" : sel.label), examGroups(sel.list));
+  };
+  render();
+  return card(h("div", { class: "card-title-row" }, h("h2", {}, "Provas do ciclo"), tabs), body);
+}
+
+/** "VA1: 4 de 4 provas feitas já têm nota" — deixa claro o que já foi corrigido em cada ciclo. */
+function examSummary(list: CourseExam[], label: string) {
+  const done = list.filter((e) => e.state === "graded" || e.state === "awaiting");
+  const graded = list.filter((e) => e.state === "graded").length;
+  const ahead = list.filter((e) => e.state === "upcoming").length;
+  if (!list.length) return h("p", { class: "note exam-summary" }, `${label}: nenhuma prova encontrada no quadro de notas.`);
+  return h(
+    "p",
+    { class: "exam-summary" },
+    h("strong", {}, `${label}: `),
+    done.length ? `${graded} de ${done.length} prova(s) feita(s) já têm nota` : "nenhuma prova feita ainda",
+    ahead ? ` · ${ahead} por vir` : "",
+    done.length > 0 && graded === done.length ? h("span", { class: "chip good" }, "✓ tudo corrigido") : done.length > graded ? h("span", { class: "chip warn" }, `${done.length - graded} sem nota`) : null,
+  );
+}
+
+function examGroups(exams: CourseExam[]) {
   const pass = getPassMark() / 10;
   const graded = exams.filter((e) => e.state === "graded").sort((a, b) => (b.gradedAt ?? 0) - (a.gradedAt ?? 0));
   const awaiting = exams.filter((e) => e.state === "awaiting").sort((a, b) => b.due! - a.due!);
@@ -193,9 +302,7 @@ function examsCard(exams: CourseExam[]) {
   const group = (title: string, list: CourseExam[], side: (e: CourseExam) => HTMLElement[]) =>
     list.length > 0 && h("section", { class: "exam-group" }, h("h3", {}, title, h("span", { class: "count" }, String(list.length))), h("ul", { class: "recent" }, list.map((e) => row(e, side(e)))));
 
-  return card(
-    h("div", { class: "card-title-row" }, h("h2", {}, "Provas do ciclo"), h("span", { class: "muted small" }, `${exams.length} encontrada(s) no quadro de notas`)),
-    exams.length
+  return exams.length
       ? h(
           "div",
           { class: "exam-groups" },
@@ -211,8 +318,7 @@ function examsCard(exams: CourseExam[]) {
           group("Próximas provas", upcoming, (e) => [h("span", { class: "chip" }, fmtRelative(e.due!)), h("span", { class: "muted small" }, fmtDateTime(e.due!))]),
           group("Sem data no AVA", undated, () => [h("span", { class: "chip" }, "sem nota")]),
         )
-      : h("p", { class: "empty" }, "Nenhum item com nome de prova (Prova, P1, Exame, Avaliação escrita…) no quadro de notas."),
-  );
+      : h("p", { class: "empty" }, "Nenhum item com nome de prova (Prova, P1, Exame, Avaliação escrita…) no quadro de notas.");
 }
 
 /** Média mínima para aprovação, em pontos (0–100). Guardada internamente em 0–10. */
