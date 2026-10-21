@@ -10,7 +10,7 @@
 
 import type { Assignment, MoodleFile, Submission, SubmissionStatus } from "../moodle/api";
 import { MoodleError, type UploadFile } from "../moodle/client";
-import { api, nowS, site, state } from "../state";
+import { api, nowS, opts, site, state } from "../state";
 import { courseName } from "../data";
 import { cleanGradeHtml, fmtDateTime, fmtRelative, stripHtml } from "../format";
 import { shell } from "../layout";
@@ -150,8 +150,9 @@ export async function assignPage(cid: number, aid: number, rid: number) {
   const course = courses.find((c) => c.id === cid);
   const a = assigns.find((x) => x.id === aid);
   if (!a) throw new Error("Tarefa não encontrada nesta disciplina (ou não está visível para você).");
-  // Sempre fresco: decide o que pode ser editado agora.
-  const st = await api().submissionStatus(aid, { refresh: true });
+  // Do cache (na hora); se vencido, a versão nova chega em segundo plano e a tela se atualiza.
+  // Depois de salvar/enviar a situação é sempre buscada de novo.
+  const st = await api().submissionStatus(aid, opts());
   if (rid !== state.routeId) return;
 
   const now = nowS();
@@ -258,7 +259,19 @@ export async function assignPage(cid: number, aid: number, rid: number) {
     const b: HTMLButtonElement = h("button", { class: "primary", onclick: () => startTimed(b) }, "Iniciar tarefa");
     actions.push(b);
   } else if (editable) {
-    actions.push(h("button", { class: "primary", onclick: () => slot.replaceChildren(editor()) }, hasContent ? "Editar envio" : "Adicionar envio"));
+    actions.push(
+      h(
+        "button",
+        {
+          class: "primary",
+          onclick: () => {
+            state.hold = true; // editando: atualização em segundo plano não redesenha a tela
+            slot.replaceChildren(editor());
+          },
+        },
+        hasContent ? "Editar envio" : "Adicionar envio",
+      ),
+    );
     if (hasContent) {
       const b: HTMLButtonElement = h("button", { class: "ghost", onclick: () => remove(b) }, "Remover envio");
       actions.push(b);
@@ -412,7 +425,16 @@ export async function assignPage(cid: number, aid: number, rid: number) {
       }
     };
     const saveBtn: HTMLButtonElement = h("button", { class: "primary", onclick: () => save(saveBtn) }, saveLabel);
-    const cancel: HTMLButtonElement = h("button", { onclick: () => slot.replaceChildren(h("div", {}, view(), actionRow())) }, "Cancelar");
+    const cancel: HTMLButtonElement = h(
+      "button",
+      {
+        onclick: () => {
+          state.hold = false;
+          slot.replaceChildren(h("div", {}, view(), actionRow()));
+        },
+      },
+      "Cancelar",
+    );
 
     redraw();
     return h(

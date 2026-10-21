@@ -18,12 +18,37 @@ import { profilePage } from "./views/profile";
 if (import.meta.env.DEV && demo) (await import("./demo")).installDemo();
 installTooltip();
 
-async function route() {
+/**
+ * Rolagem por entrada do histórico, para o botão Voltar/Avançar levar ao mesmo ponto.
+ * Cada entrada ganha um id em history.state na primeira vez que é aberta: entrada sem id é navegação
+ * nova (vai para o topo); entrada com id é volta/avanço (restaura a rolagem). Não dá para usar o
+ * popstate para isso: mudar o # do endereço também dispara popstate.
+ */
+const scrollByEntry = new Map<string, number>();
+let currentEntry: string | null = null;
+function historyEntry(): { id: string; traversal: boolean } {
+  const st = history.state as { navId?: string } | null;
+  if (st?.navId) return { id: st.navId, traversal: true };
+  const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+  history.replaceState({ ...(st ?? {}), navId: id }, "");
+  return { id, traversal: false };
+}
+
+async function route(opts: { silent?: boolean } = {}) {
   if (!state.client) return showTokenScreen();
   const id = ++state.routeId;
+  const silent = !!opts.silent;
+  state.hold = false;
   hideTooltip();
-  loading();
-  window.scrollTo(0, 0);
+  let keepY = window.scrollY;
+  if (!silent) {
+    if (currentEntry) scrollByEntry.set(currentEntry, window.scrollY);
+    const e = historyEntry();
+    currentEntry = e.id;
+    keepY = e.traversal ? (scrollByEntry.get(e.id) ?? 0) : 0;
+  }
+  // Com dados no cache a tela fica pronta quase na hora: o carregamento só aparece se demorar.
+  const skeleton = silent ? undefined : setTimeout(() => id === state.routeId && (loading(), window.scrollTo(0, 0)), 150);
   try {
     if (!state.site || state.forceRefresh) {
       state.site = await state.api!.siteInfo({ refresh: state.forceRefresh });
@@ -42,15 +67,17 @@ async function route() {
     else if (hash.startsWith("#/historico")) await historyPage(id);
     else if (hash.startsWith("#/perfil")) await profilePage(id);
     else await dashboard(id);
+    if (id === state.routeId) window.scrollTo(0, keepY);
   } catch (e) {
-    if (id === state.routeId) errorView(e);
+    if (id === state.routeId && !silent) errorView(e);
   } finally {
-    state.forceRefresh = false;
+    clearTimeout(skeleton);
+    if (id === state.routeId) state.forceRefresh = false;
   }
 }
 
 state.route = route;
-window.addEventListener("hashchange", route);
+window.addEventListener("hashchange", () => route());
 
 const token = demo ? "demo-token" : loadToken();
 if (token) setup(token);

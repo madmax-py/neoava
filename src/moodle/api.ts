@@ -551,12 +551,12 @@ export function createApi(c: MoodleClient) {
      * (o get_action_events só traz o que ainda tem ação pendente).
      */
     calendarEvents: (courseids: number[], from: number, to: number, o?: CallOptions) => {
-      // Arredonda para a hora cheia para reaproveitar o cache.
-      const h = (t: number) => Math.floor(t / 3600) * 3600;
+      // Arredonda para o dia (UTC) para a chave do cache valer o dia todo; quem chama filtra pelo intervalo exato.
+      const day = (t: number) => Math.floor(t / 86400) * 86400;
       return c
         .call<{ events: CalendarEvent[] }>(
           "core_calendar_get_calendar_events",
-          { events: { courseids }, options: { userevents: 1, siteevents: 1, timestart: h(from), timeend: h(to) + 3600 } },
+          { events: { courseids }, options: { userevents: 1, siteevents: 1, timestart: day(from), timeend: day(to) + 86400 } },
           { ttlSeconds: 15 * MIN, ...o },
         )
         .then((r) => r.events);
@@ -575,12 +575,13 @@ export function createApi(c: MoodleClient) {
 
     /** Próximos prazos de todas as disciplinas numa única chamada. */
     upcoming: (days = 30, limitnum = 50, o?: CallOptions) => {
-      // Arredonda para a hora cheia para o cache funcionar entre chamadas próximas.
-      const from = Math.floor(Date.now() / 1000 / 3600) * 3600 - 7 * 86400; // inclui atrasados da última semana
+      // Arredonda para o dia (UTC): a chave do cache vale o dia todo (antes mudava a cada hora e o
+      // localStorage enchia de entradas que nunca mais eram lidas).
+      const from = Math.floor(Date.now() / 1000 / 86400) * 86400 - 7 * 86400; // inclui atrasados da última semana
       return c
         .call<{ events: ActionEvent[] }>(
           "core_calendar_get_action_events_by_timesort",
-          { timesortfrom: from, timesortto: from + (days + 7) * 86400, limitnum },
+          { timesortfrom: from, timesortto: from + (days + 8) * 86400, limitnum },
           { ttlSeconds: 15 * MIN, ...o },
         )
         .then((r) => r.events);

@@ -90,8 +90,14 @@ export class MoodleError extends Error {
   }
 }
 
+/** Valor guardado e quando ele vence (ms). Pode ser devolvido já vencido: o cliente decide o que fazer. */
+export interface CacheEntry {
+  v: unknown;
+  exp: number;
+}
+
 export interface Cache {
-  get(key: string): unknown | undefined;
+  get(key: string): CacheEntry | undefined;
   set(key: string, value: unknown, ttlSeconds: number): void;
   clear?(): void;
 }
@@ -119,6 +125,12 @@ export interface ClientOptions {
   ttlSeconds?: number;
   /** Máximo de requisições simultâneas ao servidor (default 2). */
   maxConcurrent?: number;
+  /**
+   * Dado vencido no cache é devolvido na hora e a versão nova é buscada em segundo plano
+   * (default false). Quando a versão nova chega diferente, chama `onUpdate`.
+   */
+  staleWhileRevalidate?: boolean;
+  onUpdate?: (wsfunction: string) => void;
 }
 
 export interface CallOptions {
@@ -166,6 +178,8 @@ export class MoodleClient {
   #active = 0;
   #queue: (() => void)[] = [];
   #inflight = new Map<string, Promise<unknown>>();
+  #swr: boolean;
+  onUpdate?: (wsfunction: string) => void;
 
   constructor(opts: ClientOptions) {
     this.baseUrl = opts.baseUrl.replace(/\/+$/, "");
@@ -175,6 +189,8 @@ export class MoodleClient {
     this.#cache = opts.cache;
     this.#ttl = opts.ttlSeconds ?? 15 * 60;
     this.#max = opts.maxConcurrent ?? 2;
+    this.#swr = opts.staleWhileRevalidate ?? false;
+    this.onUpdate = opts.onUpdate;
   }
 
   get maskedToken() {
@@ -195,22 +211,37 @@ export class MoodleClient {
     // Chave de cache sem o token.
     const key = `${wsfunction}?${body.toString()}`;
     const useCache = isReadOnly && !opts.noStore;
+    const ttl = opts.ttlSeconds ?? this.#ttl;
     if (useCache && !opts.refresh) {
       const hit = this.#cache?.get(key);
-      if (hit !== undefined) return hit as T;
+      if (hit && Date.now() < hit.exp) return hit.v as T;
+      if (hit && this.#swr) {
+        // Vencido: mostra o que tem e atualiza por trás.
+        if (!this.#inflight.has(key)) {
+          this.#fetch<T>(wsfunction, body, key, true, ttl)
+            .then((fresh) => {
+              if (JSON.stringify(fresh) !== JSON.stringify(hit.v)) this.onUpdate?.(wsfunction);
+            })
+            .catch(() => {}); // sem rede/erro: segue com o que tem; a próxima chamada tenta de novo
+        }
+        return hit.v as T;
+      }
       const pending = this.#inflight.get(key);
       if (pending) return pending as Promise<T>;
     }
+    return this.#fetch<T>(wsfunction, body, key, useCache, ttl);
+  }
 
+  async #fetch<T>(wsfunction: string, body: URLSearchParams, key: string, store: boolean, ttl: number): Promise<T> {
     const p = this.#limited(() => this.#request<T>(wsfunction, body)).then((data) => {
-      if (useCache) this.#cache?.set(key, data, opts.ttlSeconds ?? this.#ttl);
+      if (store) this.#cache?.set(key, data, ttl);
       return data;
     });
     this.#inflight.set(key, p);
     try {
       return await p;
     } finally {
-      this.#inflight.delete(key);
+      if (this.#inflight.get(key) === p) this.#inflight.delete(key);
     }
   }
 
@@ -307,12 +338,9 @@ export function directTransport(baseUrl: string, token: string): Transport {
 
 /** Cache em memória (útil em testes e como base). */
 export class MemoryCache implements Cache {
-  #m = new Map<string, { v: unknown; exp: number }>();
+  #m = new Map<string, CacheEntry>();
   get(key: string) {
-    const e = this.#m.get(key);
-    if (!e) return undefined;
-    if (Date.now() > e.exp) return void this.#m.delete(key);
-    return e.v;
+    return this.#m.get(key);
   }
   set(key: string, v: unknown, ttl: number) {
     this.#m.set(key, { v, exp: Date.now() + ttl * 1000 });

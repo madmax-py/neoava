@@ -116,7 +116,13 @@ O navegador chama o Moodle direto (o servidor responde com `Access-Control-Allow
 - Para abrir no celular (mesma rede Wi-Fi): `npm run dev:rede` e acesse `http://<IP-do-PC>:5173`
   (o Vite mostra o endereço em "Network"). A página vai sem HTTPS: use só em rede de confiança
   e desligue (Ctrl+C) quando terminar. O `npm run dev` continua restrito a este computador.
-- Respostas ficam em cache no `localStorage` (15–60 min por tipo); "Atualizar" força nova busca.
+- Respostas ficam em cache no `localStorage` (com cópia em memória). Dentro da validade (5–60 min
+  por tipo) trocar de página não faz nenhuma chamada ao AVA. Vencido, o dado guardado aparece na
+  hora e a versão nova é buscada em segundo plano; se mudou, a tela se redesenha sozinha, mantendo a
+  rolagem (nunca durante uma edição ou com diálogo aberto). "Atualizar dados" força nova busca.
+- O cache se limpa sozinho (entradas vencidas há mais de 7 dias) e, se o `localStorage` encher,
+  apaga as entradas mais antigas em vez de parar de gravar. O carregamento só aparece se a tela
+  demorar mais de 150 ms, e o botão Voltar devolve a rolagem de onde você estava.
 - Links de arquivos levam `?token=` na URL (exigência do Moodle); eles abrem com `rel=noreferrer`.
 
 ## Regras do projeto

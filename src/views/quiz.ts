@@ -146,9 +146,10 @@ export async function quizPage(cid: number, qid: number, rid: number) {
   const o = opts();
   const uid = site().userid;
   const { course, quiz } = await loadQuiz(cid, qid);
-  // Tentativas e bloqueios sempre frescos: decidem se o botão "Iniciar" aparece.
+  // Do cache (na hora); se estiver vencido, a versão nova chega em segundo plano e a tela se atualiza.
+  // O AVA confere tudo de novo ao iniciar, então um dado velho aqui no máximo vira uma mensagem de erro.
   const [attempts, access, qtypes, best] = await Promise.all([
-    ifAvailable("mod_quiz_get_user_quiz_attempts", () => api().quizAttempts(qid, uid, { refresh: true }), [] as QuizAttempt[]),
+    ifAvailable("mod_quiz_get_user_quiz_attempts", () => api().quizAttempts(qid, uid, o), [] as QuizAttempt[]),
     ifAvailable("mod_quiz_get_quiz_access_information", () => api().quizAccess(qid, o), null),
     ifAvailable("mod_quiz_get_quiz_required_qtypes", () => api().quizQtypes(qid, o), [] as string[]),
     ifAvailable("mod_quiz_get_user_best_grade", () => api().quizBestGrade(qid, uid, o), null),
@@ -156,7 +157,7 @@ export async function quizPage(cid: number, qid: number, rid: number) {
   const open = attempts.find((a) => a.state === "inprogress" || a.state === "overdue");
   const attAccess = await ifAvailable(
     "mod_quiz_get_attempt_access_information",
-    () => api().attemptAccess(qid, open?.id ?? 0, { refresh: true }),
+    () => api().attemptAccess(qid, open?.id ?? 0, o),
     null as AttemptAccess | null,
   );
   if (rid !== state.routeId) return;
@@ -320,6 +321,9 @@ export async function quizPage(cid: number, qid: number, rid: number) {
 // ---------- Página de uma tentativa ----------
 
 export async function attemptPage(cid: number, qid: number, aid: number, pageParam: number | null, rid: number, mode?: "resumo") {
+  // Tela de tentativa: sempre busca o estado atual e nunca é redesenhada por atualização em segundo plano
+  // (apagaria o que você está respondendo).
+  state.hold = true;
   const uid = site().userid;
   const { course, quiz } = await loadQuiz(cid, qid);
   // Sempre fresco: a página atual e o estado mudam a cada ação.
