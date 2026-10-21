@@ -17,7 +17,8 @@ import { showTokenScreen } from "./views/login";
 import { dashboard } from "./views/dashboard";
 import { coursesPage } from "./views/courses";
 import { courseView } from "./views/course";
-import { attemptPage, quizPage } from "./views/quiz";
+import { quizPage } from "./views/quiz";
+import { attemptPage } from "./views/quiz-attempt";
 import { assignPage } from "./views/assign";
 import { deadlinesPage } from "./views/deadlines";
 import { historyPage } from "./views/history";
@@ -43,6 +44,24 @@ function historyEntry(): { id: string; traversal: boolean } {
   history.replaceState({ ...(st ?? {}), navId: id }, "");
   return { id, traversal: false };
 }
+
+type Screen = (m: RegExpMatchArray, routeId: number) => Promise<unknown>;
+
+/** Telas por endereço: a primeira que casar abre (as mais específicas vêm antes). Sem nenhuma, o painel. */
+const routes: [RegExp, Screen][] = [
+  [
+    /^#\/disciplina\/(\d+)\/questionario\/(\d+)\/tentativa\/(\d+)(?:\/pagina\/(\d+)|\/(resumo))?/,
+    (m, id) => attemptPage(+m[1], +m[2], +m[3], m[4] ? +m[4] - 1 : null, id, m[5] ? "resumo" : undefined),
+  ],
+  [/^#\/disciplina\/(\d+)\/questionario\/(\d+)/, (m, id) => quizPage(+m[1], +m[2], id)],
+  [/^#\/disciplina\/(\d+)\/tarefa\/(\d+)/, (m, id) => assignPage(+m[1], +m[2], id)],
+  [/^#\/disciplina\/(\d+)/, (m, id) => courseView(+m[1], id)],
+  [/^#\/disciplinas/, (_, id) => coursesPage(id)],
+  [/^#\/prazos/, (_, id) => deadlinesPage(id)],
+  [/^#\/historico/, (_, id) => historyPage(id)],
+  [/^#\/biblioteca(?:\/(\d+))?/, (m, id) => libraryPage(Number(m[1]) || null, id)],
+  [/^#\/perfil/, (_, id) => profilePage(id)],
+];
 
 async function route(opts: { silent?: boolean } = {}) {
   if (!state.client) return showTokenScreen();
@@ -70,30 +89,8 @@ async function route(opts: { silent?: boolean } = {}) {
       state.available = new Set(state.site.functions.map((f) => f.name));
     }
     const hash = location.hash;
-    const qz = hash.match(
-      /^#\/disciplina\/(\d+)\/questionario\/(\d+)(?:\/tentativa\/(\d+)(?:\/pagina\/(\d+)|\/(resumo))?)?/,
-    );
-    const m = hash.match(/^#\/disciplina\/(\d+)/);
-    const tf = hash.match(/^#\/disciplina\/(\d+)\/tarefa\/(\d+)/);
-    if (qz?.[3])
-      await attemptPage(
-        Number(qz[1]),
-        Number(qz[2]),
-        Number(qz[3]),
-        qz[4] ? Number(qz[4]) - 1 : null,
-        id,
-        qz[5] ? "resumo" : undefined,
-      );
-    else if (qz) await quizPage(Number(qz[1]), Number(qz[2]), id);
-    else if (tf) await assignPage(Number(tf[1]), Number(tf[2]), id);
-    else if (m) await courseView(Number(m[1]), id);
-    else if (hash.startsWith("#/disciplinas")) await coursesPage(id);
-    else if (hash.startsWith("#/prazos")) await deadlinesPage(id);
-    else if (hash.startsWith("#/historico")) await historyPage(id);
-    else if (hash.startsWith("#/biblioteca"))
-      await libraryPage(Number(hash.split("/")[2]) || null, id);
-    else if (hash.startsWith("#/perfil")) await profilePage(id);
-    else await dashboard(id);
+    const hit = routes.find(([re]) => re.test(hash));
+    await (hit ? hit[1](hash.match(hit[0])!, id) : dashboard(id));
     if (id === state.routeId) window.scrollTo(0, keepY);
   } catch (e) {
     if (id === state.routeId && !silent) errorView(e);
