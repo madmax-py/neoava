@@ -7,10 +7,13 @@ import { difficultyOf, fmtNum, getPassMark, semesterOf, setPassMark, type Diffic
 import { fmtDateTime, fmtRelative } from "../format";
 import { avatar, firstName, shell } from "../layout";
 import type { ActionEvent, Course } from "../moodle/api";
-import { card, h, heatmap, modBadge, statTile } from "../ui";
+import { card, h, heatmap, modBadge, playIntro, statTile } from "../ui";
 
 const pct = (f: number | null) => (f === null ? "–" : `${Math.round(f * 100)}%`);
 const shortName = (n: string) => (n.length > 22 ? `${n.slice(0, 21)}…` : n);
+
+/** A entrada animada só acontece no primeiro desenho do painel depois de abrir o app. */
+let introPlayed = false;
 
 export async function dashboard(id: number) {
   const d = await cycleData();
@@ -81,6 +84,10 @@ export async function dashboard(id: number) {
       span(examsCard(exams, stats), 12),
     ),
   );
+  if (!introPlayed) {
+    introPlayed = true;
+    playIntro([...document.querySelectorAll("main .page-head, main .tiles > *, main .bento > *")]);
+  }
 }
 
 /** Largura do card na grade de 12 colunas. */

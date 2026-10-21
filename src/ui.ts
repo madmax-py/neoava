@@ -442,3 +442,17 @@ export function confirmDialog(o: ConfirmOptions): Promise<{ ok: boolean; passwor
     (pass ?? check ?? confirm).focus();
   });
 }
+
+/**
+ * Entrada escalonada (cada elemento sobe e aparece em sequência). O estado final é o normal da página:
+ * a animação só preenche o começo (fill "backwards"), então sem animação — ou com "reduzir movimento" —
+ * tudo já aparece. A classe sai ao terminar, para um redesenho não repetir a entrada.
+ */
+export function playIntro(els: Element[], stepMs = 55) {
+  els.forEach((el, i) => {
+    const e = el as HTMLElement;
+    e.style.setProperty("--intro-delay", `${80 + i * stepMs}ms`);
+    e.classList.add("intro");
+    e.addEventListener("animationend", () => e.classList.remove("intro"), { once: true });
+  });
+}

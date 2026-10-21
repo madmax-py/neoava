@@ -1,7 +1,7 @@
 import { MoodleError, requestToken } from "../moodle/client";
 import { saveToken } from "../browser-cache";
 import { cache, demo, setup, state } from "../state";
-import { brandMark, h } from "../ui";
+import { brandMark, h, playIntro } from "../ui";
 
 const app = document.getElementById("app")!;
 
@@ -116,6 +116,9 @@ export function showTokenScreen(error?: MoodleError) {
       ),
     ),
   );
+  const screen = app.querySelector(".login-screen")!;
+  screen.classList.add("intro-bg");
+  playIntro([...screen.querySelector(".login-card")!.children], 70);
   user.focus();
 }
 

@@ -1043,3 +1043,10 @@ a.button.primary-link { background: var(--accent); border-color: var(--accent); 
 .demo-bar strong { font: 500 0.7rem/1 var(--f-mono); text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent-ink); }
 .demo-bar button { margin-left: auto; }
 @media (max-width: 900px) { .demo-bar { padding: 8px 16px; } }
+
+/* ---------- entrada animada (login e primeiro desenho do painel) ---------- */
+@keyframes intro-rise { from { opacity: 0; transform: translateY(14px); } }
+@keyframes intro-fade { from { opacity: 0; } }
+.intro { animation: intro-rise 560ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards; animation-delay: var(--intro-delay, 0ms); }
+/* letreiro vazado do login: aparece devagar, depois dos campos */
+.login-screen.intro-bg::before { animation: intro-fade 1400ms ease-out 250ms backwards; }
