@@ -106,6 +106,7 @@ export interface ModuleContent {
   filename: string;
   fileurl: string;
   filesize?: number;
+  timecreated?: number;
   timemodified?: number;
   mimetype?: string;
 }
@@ -119,6 +120,7 @@ export interface CourseModule {
   uservisible?: boolean;
   description?: string;
   contents?: ModuleContent[];
+  contentsinfo?: { filescount?: number; lastmodified?: number; mimetypes?: string[] };
   dates?: { label: string; timestamp: number }[];
 }
 

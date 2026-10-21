@@ -28,13 +28,15 @@ const pastDefs: [number, string, number, string][] = [
 ];
 const past = pastDefs.map(([id, fullname, start]) => ({ id, fullname, shortname: fullname, startdate: start, enddate: start + 150 * D, progress: 100 }));
 
-const items: Record<number, [string, number, number | null][]> = {
-  101: [["Prova 1", 3, 2.4], ["Projeto — entrega 1", 2, 1.8], ["Seminário", 1, 0.9], ["Prova 2", 3, null], ["Projeto — entrega 2", 1, null]],
-  102: [["Lista SQL", 1, 0.7], ["Prova 1", 4, 2.6], ["Trabalho prático", 2, null], ["Prova 2", 3, null]],
-  103: [["Lab 1", 1, 1], ["Lab 2", 1, 0.8], ["Prova 1", 4, 3.6], ["Lab 3", 1, null], ["Prova 2", 3, null]],
-  104: [["Quiz 1", 1, 0.4], ["Prova 1", 4, 2.1], ["Projeto IA", 3, null], ["Prova 2", 2, null]],
-  105: [["Fórum 1", 2, 2], ["Fórum 2", 2, 1.7], ["Estudo de caso", 3, 2.9], ["Atividade final", 3, null]],
+// [nome, valor (0–10), nota, prazo em dias a partir de hoje]
+const items: Record<number, [string, number, number | null, number?][]> = {
+  101: [["Prova 1", 3, 2.4, -40], ["Projeto — entrega 1", 2, 1.8, -35], ["Seminário", 1, 0.9], ["Prova 2", 3, null, 10], ["Projeto — entrega 2", 1, null, 4]],
+  102: [["Lista SQL", 1, 1, -45], ["Prova 1", 4, 2.6, -38], ["Trabalho prático", 2, null, 9], ["Prova 2", 3, null, 14]],
+  103: [["Lab 1", 1, 1], ["Lab 2", 1, 0.8], ["Prova 1", 4, 3.6, -36], ["Lab 3", 1, null], ["Prova 2", 3, null, 19]],
+  104: [["Quiz 1", 1, 0.9], ["Prova 1", 4, 2.1, -37], ["Projeto IA", 3, null, 12], ["Prova 2", 2, null, -3]],
+  105: [["Fórum 1", 2, 2], ["Fórum 2", 2, 1.7], ["Estudo de caso", 3, 2.9], ["Avaliação escrita", 3, null, -5]],
 };
+const isExamName = (n: string) => /prova|avalia[çc][ãa]o escrita/i.test(n);
 
 // Média "até agora" (como o Moodle com "excluir notas vazias"): obtido / máximo já corrigido, em escala 10.
 const currentGrades: Record<number, string> = Object.fromEntries(
@@ -62,7 +64,8 @@ function gradeItems(courseid: number) {
             id: courseid * 100 + i,
             itemname,
             itemtype: "mod",
-            itemmodule: i % 2 ? "quiz" : "assign",
+            itemmodule: isExamName(itemname) || i % 2 === 0 ? "assign" : "quiz",
+            iteminstance: courseid * 100 + i,
             categoryid: cyclic ? cat(graderaw === null ? 2 : 1) : null,
             grademax,
             graderaw,
@@ -133,6 +136,54 @@ const quizDefs = (cid: number) => [
   { id: cid * 100 + 4, name: "Simulado VA2", timeclose: now + 15 * D, attempts: 3, grade: 2, state: "none" },
 ];
 
+// Materiais publicados ao longo do semestre. A 101 nomeia as seções por VA; as outras usam semanas
+// (o ciclo sai da data de publicação).
+const materialDefs: [string, string, number, string?][] = [
+  ["Slides — aula 1: introdução", "resource", 3, "aula01.pdf"],
+  ["Vídeo: visão geral da disciplina", "url", 5],
+  ["Lista de exercícios 1", "resource", 12, "lista01.pdf"],
+  ["Leitura complementar — capítulo 2", "page", 18],
+  ["Slides — aula 4", "resource", 26, "aula04.pptx"],
+  ["Material de apoio da VA1", "folder", 33],
+  ["Gabarito comentado da Prova 1", "resource", 44, "gabarito-p1.pdf"],
+  ["Slides — aula 7", "resource", 52, "aula07.pdf"],
+  ["Artigo: estudo de caso", "url", 58],
+  ["Lista de exercícios 2", "resource", 66, "lista02.pdf"],
+  ["Apostila da unidade 3", "book", 74],
+  ["Slides — aula 10", "resource", 80, "aula10.pdf"],
+];
+function contents(cid: number) {
+  const base = "https://avagrad.unievangelica.edu.br/webservice/pluginfile.php/0/mod_resource/content/1";
+  const mod = (i: number, [name, modname, day, file]: (typeof materialDefs)[number]) => {
+    const t = curSemStart + day * D + cid * 3600;
+    const files =
+      modname === "folder"
+        ? ["resumo.pdf", "mapa-mental.png", "exercicios-extras.pdf"].map((f) => ({ type: "file", filename: f, fileurl: `${base}/${f}`, timecreated: t, timemodified: t }))
+        : modname === "resource"
+          ? [{ type: "file", filename: file!, fileurl: `${base}/${file}`, timecreated: t, timemodified: t }]
+          : [{ type: modname === "url" ? "url" : "file", filename: name, fileurl: "https://exemplo.org/material", timecreated: t, timemodified: t }];
+    return { id: cid * 1000 + i, name, modname, url: `https://avagrad.unievangelica.edu.br/mod/${modname}/view.php?id=${cid * 1000 + i}`, contents: files };
+  };
+  const published = materialDefs.filter(([, , day]) => curSemStart + day * D < now);
+  const geral = { id: 1, section: 0, name: "Geral", summary: "", modules: [mod(900, ["Plano de ensino", "resource", 0, "plano-de-ensino.pdf"]), { id: cid * 1000 + 901, name: "Avisos", modname: "forum", url: "#" }] };
+  if (cid === 101) {
+    const by = (lo: number, hi: number) => published.map((m, i) => [m, i] as const).filter(([m]) => m[2] >= lo && m[2] < hi).map(([m, i]) => mod(i, m));
+    return [
+      geral,
+      { id: 2, section: 1, name: "VA1 — Requisitos", summary: "", modules: by(0, 40) },
+      { id: 3, section: 2, name: "VA2 — Arquitetura", summary: "", modules: [...by(40, 200), { id: 101999, name: "Projeto — entrega 2", modname: "assign", url: "#" }] },
+      { id: 4, section: 3, name: "VA3 — Testes", summary: "", modules: [] },
+    ];
+  }
+  // Sem data em um item: cai em "Sem ciclo identificado".
+  const weeks = published.map((m, i) => ({ id: 10 + i, section: i + 1, name: `Semana ${i + 1}`, summary: "", modules: [mod(i, m)] }));
+  weeks.push({ id: 99, section: 99, name: "Extras", summary: "", modules: [{ id: cid * 1000 + 950, name: "Canal da disciplina", modname: "url", url: "https://avagrad.unievangelica.edu.br/mod/url/view.php?id=1", contents: [] } as never] });
+  return [geral, ...weeks];
+}
+
+/** courseids[0], courseids[1]… do corpo da requisição. */
+const courseIds = (p: URLSearchParams) => [...p.keys()].filter((k) => k.startsWith("courseids[")).map((k) => Number(p.get(k)));
+
 function respond(fn: string, p: URLSearchParams): unknown {
   switch (fn) {
     case "core_webservice_get_site_info":
@@ -151,23 +202,25 @@ function respond(fn: string, p: URLSearchParams): unknown {
     case "core_calendar_get_action_events_by_timesort":
       return { events };
     case "mod_assign_get_assignments": {
-      const cid = Number(p.get("courseids[0]"));
       return {
-        courses: [
+        courses: courseIds(p).map((cid) => (
           {
             id: cid,
-            assignments: events
-              .filter((e) => e.course.id === cid && e.modulename === "assign")
-              .map((e) => ({ id: e.id, cmid: e.id, course: cid, name: e.activityname, duedate: e.timesort, intro: "<p>Descrição da tarefa de exemplo.</p>" })),
-          },
-        ],
+            assignments: [
+              ...events
+                .filter((e) => e.course.id === cid && e.modulename === "assign")
+                .map((e) => ({ id: e.id, cmid: e.id, course: cid, name: e.activityname, duedate: e.timesort, intro: "<p>Descrição da tarefa de exemplo.</p>" })),
+              // Atividades do quadro de notas com prazo (provas e entregas), para o painel saber quando foram.
+              ...(items[cid] ?? []).flatMap(([name, , , due], i) =>
+                due === undefined || !(isExamName(name) || i % 2 === 0) ? [] : [{ id: cid * 100 + i, cmid: cid * 100 + i, course: cid, name, duedate: now + due * D, intro: "" }],
+              ),
+            ],
+          }
+        )),
       };
     }
     case "core_course_get_contents":
-      return [
-        { id: 1, section: 0, name: "Geral", summary: "", modules: [{ id: 1, name: "Plano de ensino", modname: "resource", url: "#", contents: [] }, { id: 2, name: "Avisos", modname: "forum", url: "#" }] },
-        { id: 2, section: 1, name: "Unidade 1", summary: "<p>Introdução</p>", modules: [{ id: 3, name: "Slides — aula 1", modname: "resource", url: "#" }, { id: 4, name: "Quiz 1", modname: "quiz", url: "#" }] },
-      ];
+      return contents(Number(p.get("courseid")));
     case "mod_assign_get_submission_status": {
       const id = Number(p.get("assignid"));
       const ev = events.find((e) => e.id === id);
@@ -188,8 +241,7 @@ function respond(fn: string, p: URLSearchParams): unknown {
       };
     }
     case "mod_quiz_get_quizzes_by_courses": {
-      const cid = Number(p.get("courseids[0]"));
-      return { quizzes: quizDefs(cid).map((q) => ({ ...q, coursemodule: q.id, course: cid, timeopen: 0, timelimit: 1800, sumgrades: 10, decimalpoints: 2, visible: true })) };
+      return { quizzes: courseIds(p).flatMap((cid) => quizDefs(cid).map((q) => ({ ...q, coursemodule: q.id, course: cid, timeopen: 0, timelimit: 1800, sumgrades: 10, decimalpoints: 2, visible: true }))) };
     }
     case "mod_quiz_get_user_quiz_attempts": {
       const q = Object.values(current).flatMap((c) => quizDefs(c.id)).find((x) => x.id === Number(p.get("quizid")));

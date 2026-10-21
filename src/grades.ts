@@ -348,6 +348,123 @@ export function mean(xs: number[]): number | null {
   return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
 }
 
+// ---------- Provas ----------
+// O quadro de notas do AVA é incompleto (muitos professores não lançam tudo), então o painel
+// olha principalmente para as provas: são a melhor pista de dificuldade real na disciplina.
+
+/** Nome de prova: "Prova 1", "P2", "Avaliação escrita", "Exame final"… (simulados e quizzes de revisão não contam). */
+const EXAM_NAME = /\b(provas?|exame|P\s?[1-3]|avalia[çc][ãa]o\s+(escrita|individual|presencial|te[óo]rica|pr[áa]tica|final|bimestral|oficial))\b/i;
+const NOT_EXAM = /\b(simulado|revis[ãa]o|treino|pr[ée]via)\b/i;
+
+export function isExam(name: string | null | undefined): boolean {
+  return !!name && EXAM_NAME.test(name) && !NOT_EXAM.test(name);
+}
+
+/** Prazo de cada atividade, por módulo e instância (tarefa: entrega; quiz: fechamento). */
+export type DeadlineIndex = Map<string, number>;
+
+export function buildDeadlineIndex(assigns: { id: number; duedate?: number }[], quizzes: { id: number; timeclose?: number }[]): DeadlineIndex {
+  const m: DeadlineIndex = new Map();
+  for (const a of assigns) if (a.duedate) m.set(`assign:${a.id}`, a.duedate);
+  for (const q of quizzes) if (q.timeclose) m.set(`quiz:${q.id}`, q.timeclose);
+  return m;
+}
+
+export function itemDeadline(i: Pick<GradeItem, "itemmodule" | "iteminstance">, dl?: DeadlineIndex): number | null {
+  return (i.itemmodule && i.iteminstance && dl?.get(`${i.itemmodule}:${i.iteminstance}`)) || null;
+}
+
+export type ExamState = "graded" | "awaiting" | "upcoming" | "undated";
+
+export interface Exam {
+  id: number;
+  name: string;
+  module: string | null;
+  earned: number | null;
+  /** Valor da prova; null se o AVA não informa. */
+  max: number | null;
+  pct: number | null;
+  gradedAt: number | null;
+  due: number | null;
+  /** graded = nota lançada · awaiting = já passou e sem nota · upcoming = ainda vai acontecer. */
+  state: ExamState;
+  categoryid: number | null;
+}
+
+export function examsOf(items: GradeItem[], idx?: MaxIndex, dl?: DeadlineIndex, now = Date.now() / 1000): Exam[] {
+  return items
+    .filter((i) => (i.itemtype === "mod" || i.itemtype === "manual") && isExam(i.itemname))
+    .map((i) => {
+      const earned = typeof i.graderaw === "number" ? Math.max(0, i.graderaw) : null;
+      const max = itemMax(i, idx)?.max ?? null;
+      const due = itemDeadline(i, dl);
+      const state: ExamState = earned !== null ? "graded" : due === null ? "undated" : due < now ? "awaiting" : "upcoming";
+      return {
+        id: i.id,
+        name: i.itemname ?? "Prova",
+        module: i.itemmodule,
+        earned,
+        max,
+        pct: earned !== null && max ? Math.min(1, earned / max) : null,
+        gradedAt: i.gradedategraded ?? null,
+        due,
+        state,
+        categoryid: i.categoryid ?? null,
+      };
+    });
+}
+
+export type DifficultyLevel = "bad" | "warn" | "ok" | "no-exam";
+
+export interface Difficulty {
+  /** Aproveitamento nas provas corrigidas (0–1). */
+  exam: number | null;
+  /** Aproveitamento nas demais atividades corrigidas (0–1). */
+  others: number | null;
+  /** Aproveitamento em tudo que foi corrigido (0–1). */
+  overall: number | null;
+  examsGraded: number;
+  level: DifficultyLevel;
+  reason: string;
+}
+
+/** Diferença (em pontos percentuais) entre provas e demais atividades que já indica dificuldade. */
+const EXAM_GAP = 0.15;
+
+/**
+ * Dificuldade na disciplina, com peso nas provas: abaixo da média na prova pesa mais que o total,
+ * e ir bem nas atividades mas mal na prova também é sinal de alerta.
+ */
+export function difficultyOf(exams: Exam[], acc: Accumulation | null, passFrac: number): Difficulty {
+  const graded = exams.filter((e) => e.pct !== null);
+  const examEarned = graded.reduce((a, e) => a + e.earned!, 0);
+  const examMax = graded.reduce((a, e) => a + e.max!, 0);
+  const exam = examMax > 0 ? Math.min(1, examEarned / examMax) : null;
+  const examIds = new Set(exams.map((e) => e.id));
+  const rest = (acc?.pieces ?? []).filter((p) => p.earned !== null && !examIds.has(p.id));
+  const restMax = rest.reduce((a, p) => a + p.max, 0);
+  const others = restMax > 0 ? Math.min(1, rest.reduce((a, p) => a + Math.min(p.earned!, p.max), 0) / restMax) : null;
+  const allMax = examMax + restMax;
+  const overall = allMax > 0 ? (examEarned + rest.reduce((a, p) => a + Math.min(p.earned!, p.max), 0)) / allMax : null;
+
+  let level: DifficultyLevel = "ok";
+  let reason = "Indo bem nas provas";
+  if (exam === null) {
+    level = "no-exam";
+    reason = exams.some((e) => e.state === "awaiting") ? "Prova feita, nota ainda não lançada" : "Nenhuma prova corrigida ainda";
+  } else if (exam < passFrac) {
+    level = "bad";
+    reason = "Prova abaixo da média";
+  } else if (others !== null && others - exam >= EXAM_GAP) {
+    level = "warn";
+    reason = "Prova bem abaixo das atividades";
+  } else if (exam < passFrac + 0.1) {
+    level = "warn";
+    reason = "Prova perto do limite";
+  }
+  return { exam, others, overall, examsGraded: graded.length, level, reason };
+}
+
 // ---------- Preferência: média mínima de aprovação ----------
 // Guardada na escala 0–10 (ex.: 6 = média 60 de 100), como antes.
 

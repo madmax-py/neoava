@@ -359,7 +359,7 @@ export function rangeList(rows: RangeRow[], opts: { max: number; ref?: number; r
 
 /** Logo + nome do app (barra lateral, topo no celular e tela de login). */
 export function brandMark(size = 28) {
-  return [h("img", { class: "logo", src: neoavaLogo, alt: "", width: size, height: size }), h("span", {}, "NeoAVA")];
+  return [h("img", { class: "logo", src: neoavaLogo, alt: "", width: size, height: size }), h("span", { class: "wordmark", "aria-label": "NeoAVA" }, h("b", {}, "Neo"), h("span", { class: "out" }, "AVA"))];
 }
 
 // ---------- Ícones (traço 1.75, 20px) ----------
@@ -369,6 +369,7 @@ const ICONS: Record<string, string> = {
   book: "M4 4.5A1.5 1.5 0 0 1 5.5 3H20v15H5.5A1.5 1.5 0 0 0 4 19.5zM4 19.5A1.5 1.5 0 0 0 5.5 21H20v-3",
   calendar: "M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zM4 10h16M8 3v4M16 3v4",
   chart: "M4 20h16M7 16v-5M12 16V7M17 16v-8",
+  library: "M5 4h3v16H5zM10 4h3v16h-3zM15 5l3-1 4 15-3 1z",
   user: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0",
   refresh: "M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4",
   logout: "M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 17l5-5-5-5M15 12H3",

@@ -1,8 +1,8 @@
 // Busca e agrega os dados usados por várias telas. Tudo passa pelo cache do cliente.
 
-import type { ActionEvent, Assignment, CalendarEvent, Course, GradeItem, Quiz } from "./moodle/api";
+import type { ActionEvent, Assignment, CalendarEvent, Course, CourseModule, CourseSection, GradeItem, Quiz } from "./moodle/api";
 import { api, DAY, ifAvailable, nowS, opts, site, state } from "./state";
-import { accumulate, buildMaxIndex, cyclesOf, isCurrent, type Accumulation, type CycleSummary, type MaxIndex } from "./grades";
+import { accumulate, buildDeadlineIndex, buildMaxIndex, cyclesOf, difficultyOf, examsOf, getPassMark, isCurrent, itemDeadline, type Accumulation, type CycleSummary, type DeadlineIndex, type Difficulty, type Exam, type MaxIndex } from "./grades";
 import { fmtDateTime, fmtRelative, TZ } from "./format";
 import { columnChart, h, modBadge } from "./ui";
 
@@ -30,6 +30,8 @@ export interface CourseStats {
   /** Modelo de 3 ciclos de 100 pontos (null se a disciplina não tem VA1–VA3). */
   cycles: CycleSummary | null;
   events: ActionEvent[];
+  exams: Exam[];
+  difficulty: Difficulty;
 }
 
 /**
@@ -47,17 +49,25 @@ export async function cycleData() {
       ])
     : [[], []];
   const idx = buildMaxIndex(assigns, quizzes);
+  const dl = buildDeadlineIndex(assigns, quizzes);
+  const passFrac = getPassMark() / 10;
   const items = await Promise.all(
     base.current.map((c) => ifAvailable("gradereport_user_get_grade_items", () => api().gradeItems(c.id, site().userid, o), [] as GradeItem[]).catch(() => [] as GradeItem[])),
   );
-  const stats: CourseStats[] = base.current.map((course, i) => ({
-    course,
-    items: items[i],
-    acc: accumulate(items[i], idx),
-    cycles: cyclesOf(items[i], idx, course),
-    events: base.events.filter((e) => e.course?.id === course.id),
-  }));
-  return { ...base, assigns, quizzes, idx, stats };
+  const stats: CourseStats[] = base.current.map((course, i) => {
+    const acc = accumulate(items[i], idx);
+    const exams = examsOf(items[i], idx, dl);
+    return {
+      course,
+      items: items[i],
+      acc,
+      cycles: cyclesOf(items[i], idx, course),
+      events: base.events.filter((e) => e.course?.id === course.id),
+      exams,
+      difficulty: difficultyOf(exams, acc, passFrac),
+    };
+  });
+  return { ...base, assigns, quizzes, idx, dl, stats };
 }
 
 export type { MaxIndex };
@@ -280,4 +290,84 @@ export function closedRow(it: ClosedItem, o: EventRowOptions = {}) {
     ),
     h("span", { class: `chip ${cls}` }, label),
   );
+}
+
+// ---------- Biblioteca: materiais publicados pelo professor ----------
+
+/** Módulos que são material de estudo (não atividade avaliativa). */
+export const MATERIAL_MODS = ["resource", "folder", "url", "page", "book", "imscp"] as const;
+
+export type MaterialKind = "file" | "link" | "page";
+export const KIND_LABEL: Record<MaterialKind, string> = { file: "Arquivos", link: "Links e vídeos", page: "Páginas e livros" };
+const kindOf = (mod: string): MaterialKind => (mod === "url" ? "link" : mod === "page" || mod === "book" || mod === "imscp" ? "page" : "file");
+
+export interface Material {
+  module: CourseModule;
+  section: CourseSection;
+  kind: MaterialKind;
+  /** Quando o professor publicou (data de criação dos arquivos; ou da última alteração). */
+  postedAt: number | null;
+  /** 1–3 = ciclo; 0 = material geral (plano de ensino, avisos); null = sem como saber. */
+  cycle: number | null;
+  /** Como o ciclo foi decidido. */
+  by: "section" | "date" | "general" | null;
+}
+
+export type CycleSplit = { kind: "exams" | "semester"; ends: [number, number] } | null;
+
+// Só nomes que são ciclo de verdade: "Unidade 2" ou "Etapa 3" nem sempre coincidem com a VA.
+const CYCLE_IN_NAME = /\b(?:VA|FASE|CICLO)\s*0?([1-3])\b|\b([1-3])\s*[ºª°]?\s*(?:VA|FASE|CICLO)\b/i;
+const GENERAL_SECTION = /\b(geral|apresenta[çc][ãa]o|plano de ensino|boas[- ]vindas|informa[çc][õo]es|avisos)\b/i;
+
+/**
+ * Onde termina cada ciclo. Preferência: o prazo da última atividade avaliativa de VA1 e de VA2
+ * (as provas fecham o ciclo). Sem isso, divide o período da disciplina em três partes iguais.
+ */
+export function cycleSplit(course: Course, items: GradeItem[], cycles: CycleSummary | null, dl: DeadlineIndex): CycleSplit {
+  if (cycles) {
+    const ends = cycles.cycles.slice(0, 2).map((c) => {
+      const ds = items.filter((i) => i.categoryid === c.id).map((i) => itemDeadline(i, dl)).filter((d): d is number => d !== null);
+      return ds.length ? Math.max(...ds) : null;
+    });
+    if (ends[0] && ends[1] && ends[0] < ends[1]) return { kind: "exams", ends: [ends[0], ends[1]] };
+  }
+  const start = course.startdate ?? 0;
+  const end = course.enddate ?? 0;
+  if (start && end > start) {
+    const third = (end - start) / 3;
+    return { kind: "semester", ends: [start + third, start + 2 * third] };
+  }
+  return null;
+}
+
+function postedAt(m: CourseModule): number | null {
+  const created = (m.contents ?? []).map((c) => c.timecreated || c.timemodified || 0).filter((t) => t > 0);
+  if (created.length) return Math.min(...created);
+  return m.contentsinfo?.lastmodified || null;
+}
+
+/**
+ * Materiais de uma disciplina com o ciclo de cada um. Ordem de decisão:
+ * 1. nome da seção ("VA1", "Fase 2", "3º ciclo"); 2. data de publicação × fim de cada ciclo;
+ * 3. seção geral (tópico 0, "Apresentação"); 4. sem ciclo identificado.
+ */
+export function materialsOf(sections: CourseSection[], split: CycleSplit): Material[] {
+  const out: Material[] = [];
+  for (const section of sections) {
+    if (section.uservisible === false) continue;
+    const m = CYCLE_IN_NAME.exec(section.name ?? "");
+    const fromSection = m ? Number(m[1] ?? m[2]) : null;
+    const general = section.section === 0 || GENERAL_SECTION.test(section.name ?? "");
+    for (const module of section.modules) {
+      if (module.uservisible === false || !(MATERIAL_MODS as readonly string[]).includes(module.modname)) continue;
+      const at = postedAt(module);
+      let cycle: number | null = null;
+      let by: Material["by"] = null;
+      if (fromSection) [cycle, by] = [fromSection, "section"];
+      else if (general) [cycle, by] = [0, "general"];
+      else if (at && split) [cycle, by] = [at <= split.ends[0] ? 1 : at <= split.ends[1] ? 2 : 3, "date"];
+      out.push({ module, section, kind: kindOf(module.modname), postedAt: at, cycle, by });
+    }
+  }
+  return out;
 }

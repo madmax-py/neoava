@@ -1,3 +1,12 @@
+// fontes locais (o CSP só aceita font-src 'self'); só o subconjunto latino
+import "@fontsource/tektur/latin-600.css";
+import "@fontsource/tektur/latin-800.css";
+import "@fontsource/tektur/latin-900.css";
+import "@fontsource/ibm-plex-sans/latin-400.css";
+import "@fontsource/ibm-plex-sans/latin-500.css";
+import "@fontsource/ibm-plex-sans/latin-600.css";
+import "@fontsource/ibm-plex-mono/latin-400.css";
+import "@fontsource/ibm-plex-mono/latin-500.css";
 import "./style.css";
 import { maskToken } from "./moodle/client";
 import { loadToken } from "./browser-cache";
@@ -11,6 +20,7 @@ import { courseView } from "./views/course";
 import { deadlinesPage } from "./views/deadlines";
 import { historyPage } from "./views/history";
 import { profilePage } from "./views/profile";
+import { libraryPage } from "./views/library";
 
 // import.meta.env.DEV direto aqui para o build de produção não incluir o demo.
 if (import.meta.env.DEV && demo) (await import("./demo")).installDemo();
@@ -33,6 +43,7 @@ async function route() {
     else if (hash.startsWith("#/disciplinas")) await coursesPage(id);
     else if (hash.startsWith("#/prazos")) await deadlinesPage(id);
     else if (hash.startsWith("#/historico")) await historyPage(id);
+    else if (hash.startsWith("#/biblioteca")) await libraryPage(Number(hash.split("/")[2]) || null, id);
     else if (hash.startsWith("#/perfil")) await profilePage(id);
     else await dashboard(id);
   } catch (e) {
