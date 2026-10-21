@@ -58,24 +58,40 @@ async function route(opts: { silent?: boolean } = {}) {
     keepY = e.traversal ? (scrollByEntry.get(e.id) ?? 0) : 0;
   }
   // Com dados no cache a tela fica pronta quase na hora: o carregamento só aparece se demorar.
-  const skeleton = silent ? undefined : setTimeout(() => id === state.routeId && (loading(), window.scrollTo(0, 0)), 150);
+  const skeleton = silent
+    ? undefined
+    : setTimeout(
+        () => id === state.routeId && (loading(), window.scrollTo(0, 0)),
+        150,
+      );
   try {
     if (!state.site || state.forceRefresh) {
       state.site = await state.api!.siteInfo({ refresh: state.forceRefresh });
       state.available = new Set(state.site.functions.map((f) => f.name));
     }
     const hash = location.hash;
-    const qz = hash.match(/^#\/disciplina\/(\d+)\/questionario\/(\d+)(?:\/tentativa\/(\d+)(?:\/pagina\/(\d+)|\/(resumo))?)?/);
+    const qz = hash.match(
+      /^#\/disciplina\/(\d+)\/questionario\/(\d+)(?:\/tentativa\/(\d+)(?:\/pagina\/(\d+)|\/(resumo))?)?/,
+    );
     const m = hash.match(/^#\/disciplina\/(\d+)/);
     const tf = hash.match(/^#\/disciplina\/(\d+)\/tarefa\/(\d+)/);
-    if (qz?.[3]) await attemptPage(Number(qz[1]), Number(qz[2]), Number(qz[3]), qz[4] ? Number(qz[4]) - 1 : null, id, qz[5] ? "resumo" : undefined);
+    if (qz?.[3])
+      await attemptPage(
+        Number(qz[1]),
+        Number(qz[2]),
+        Number(qz[3]),
+        qz[4] ? Number(qz[4]) - 1 : null,
+        id,
+        qz[5] ? "resumo" : undefined,
+      );
     else if (qz) await quizPage(Number(qz[1]), Number(qz[2]), id);
     else if (tf) await assignPage(Number(tf[1]), Number(tf[2]), id);
     else if (m) await courseView(Number(m[1]), id);
     else if (hash.startsWith("#/disciplinas")) await coursesPage(id);
     else if (hash.startsWith("#/prazos")) await deadlinesPage(id);
     else if (hash.startsWith("#/historico")) await historyPage(id);
-    else if (hash.startsWith("#/biblioteca")) await libraryPage(Number(hash.split("/")[2]) || null, id);
+    else if (hash.startsWith("#/biblioteca"))
+      await libraryPage(Number(hash.split("/")[2]) || null, id);
     else if (hash.startsWith("#/perfil")) await profilePage(id);
     else await dashboard(id);
     if (id === state.routeId) window.scrollTo(0, keepY);
@@ -92,5 +108,6 @@ window.addEventListener("hashchange", () => route());
 
 const token = demo ? "demo-token" : loadToken();
 if (token) setup(token);
-if (import.meta.env.DEV && token) console.info(`Token em uso: ${maskToken(token)}`);
+if (import.meta.env.DEV && token)
+  console.info(`Token em uso: ${maskToken(token)}`);
 route();

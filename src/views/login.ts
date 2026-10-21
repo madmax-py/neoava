@@ -2,14 +2,31 @@ import { MoodleError, requestToken } from "../moodle/client";
 import { saveToken } from "../browser-cache";
 import { cache, demo, setup, state } from "../state";
 import { brandMark, h, playIntro } from "../ui";
+import { warmUp } from "../prefetch";
 
 const app = document.getElementById("app")!;
 
-function useToken(t: string) {
+/**
+ * Entra com o token. Com `btn`, o botão continua "Entrando…" (com a barra de progresso) enquanto os dados
+ * de todas as telas vão para o cache; assim, depois de entrar, cada página abre na hora.
+ */
+async function useToken(t: string, btn?: HTMLButtonElement) {
   saveToken(t);
   cache.clear();
   state.site = null;
   setup(t);
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add("loading");
+    btn.textContent = "Entrando…";
+    btn.style.setProperty("--p", "0");
+    try {
+      await warmUp((f) => btn.style.setProperty("--p", String(f)));
+    } catch {
+      // Token recusado ou AVA fora do ar: o route() abaixo tenta de novo e mostra o erro.
+      state.site = null;
+    }
+  }
   location.hash = "#/";
   state.route();
 }
@@ -17,7 +34,8 @@ function useToken(t: string) {
 export function logout() {
   // Na demonstração, "Sair" só fecha a demo: o login real (se houver) continua salvo.
   if (demo) return exitDemo();
-  if (!confirm("Sair? O token salvo neste navegador e o cache serão apagados.")) return;
+  if (!confirm("Sair? O token salvo neste navegador e o cache serão apagados."))
+    return;
   saveToken(null);
   cache.clear();
   location.hash = "";
@@ -25,11 +43,27 @@ export function logout() {
 }
 
 export function showTokenScreen(error?: MoodleError) {
-  const user = h("input", { name: "username", placeholder: "Matrícula", autocomplete: "username", spellcheck: "false" });
-  const pass = h("input", { name: "password", type: "password", placeholder: "Senha", autocomplete: "current-password" });
+  const user = h("input", {
+    name: "username",
+    placeholder: "Matrícula",
+    autocomplete: "username",
+    spellcheck: "false",
+  });
+  const pass = h("input", {
+    name: "password",
+    type: "password",
+    placeholder: "Senha",
+    autocomplete: "current-password",
+  });
   const loginBtn = h("button", { type: "submit", class: "primary" }, "Entrar");
   const loginMsg = h("div", { class: "error", hidden: true });
-  const tokenInput = h("input", { type: "password", placeholder: "Cole o token aqui", autocomplete: "off", spellcheck: "false" });
+  const tokenInput = h("input", {
+    type: "password",
+    placeholder: "Cole o token aqui",
+    autocomplete: "off",
+    spellcheck: "false",
+  });
+  const tokenBtn = h("button", { type: "submit" }, "Usar token");
   const current = state.client?.maskedToken;
 
   app.replaceChildren(
@@ -40,9 +74,19 @@ export function showTokenScreen(error?: MoodleError) {
         "div",
         { class: "login-card" },
         h("div", { class: "brand big" }, brandMark(32)),
-        h("p", { class: "muted" }, "Suas notas, prazos e disciplinas do AVA UniEvangélica num só lugar."),
+        h(
+          "p",
+          { class: "muted" },
+          "Suas notas, prazos e disciplinas do AVA UniEvangélica num só lugar.",
+        ),
         error &&
-          h("div", { class: "error" }, error.needsNewToken ? `Sua sessão expirou ou foi revogada (${error.errorcode}). Entre de novo.` : `Erro: ${error.message}`),
+          h(
+            "div",
+            { class: "error" },
+            error.needsNewToken
+              ? `Sua sessão expirou ou foi revogada (${error.errorcode}). Entre de novo.`
+              : `Erro: ${error.message}`,
+          ),
         h(
           "form",
           {
@@ -57,10 +101,11 @@ export function showTokenScreen(error?: MoodleError) {
               try {
                 const t = await requestToken(__MOODLE_URL__, u, pass.value);
                 pass.value = "";
-                useToken(t);
+                await useToken(t, loginBtn);
               } catch (err) {
                 pass.value = "";
-                loginMsg.textContent = err instanceof MoodleError ? err.message : String(err);
+                loginMsg.textContent =
+                  err instanceof MoodleError ? err.message : String(err);
                 loginMsg.hidden = false;
                 loginBtn.disabled = false;
                 loginBtn.textContent = "Entrar";
@@ -76,8 +121,16 @@ export function showTokenScreen(error?: MoodleError) {
         h(
           "div",
           { class: "demo-entry" },
-          h("button", { type: "button", class: "ghost", onclick: openDemo }, "Ver demonstração"),
-          h("span", { class: "muted small" }, "Conta fictícia com dados de exemplo. Não acessa o AVA."),
+          h(
+            "button",
+            { type: "button", class: "ghost", onclick: openDemo },
+            "Ver demonstração",
+          ),
+          h(
+            "span",
+            { class: "muted small" },
+            "Conta fictícia com dados de exemplo. Não acessa o AVA.",
+          ),
         ),
         h(
           "p",
@@ -97,11 +150,11 @@ export function showTokenScreen(error?: MoodleError) {
               onsubmit: (e) => {
                 e.preventDefault();
                 const t = tokenInput.value.trim();
-                if (t) useToken(t);
+                if (t) void useToken(t, tokenBtn);
               },
             },
             tokenInput,
-            h("button", { type: "submit" }, "Usar token"),
+            tokenBtn,
           ),
         ),
         current &&
@@ -111,7 +164,11 @@ export function showTokenScreen(error?: MoodleError) {
             h("span", { class: "muted small" }, `Token atual: ${current}`),
             h("span", { class: "spacer" }),
             h("a", { href: "#/", class: "small" }, "Voltar ao painel"),
-            h("button", { class: "link small", type: "button", onclick: logout }, "Sair"),
+            h(
+              "button",
+              { class: "link small", type: "button", onclick: logout },
+              "Sair",
+            ),
           ),
       ),
     ),

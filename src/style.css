@@ -1050,3 +1050,12 @@ a.button.primary-link { background: var(--accent); border-color: var(--accent); 
 .intro { animation: intro-rise 560ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards; animation-delay: var(--intro-delay, 0ms); }
 /* letreiro vazado do login: aparece devagar, depois dos campos */
 .login-screen.intro-bg::before { animation: intro-fade 1400ms ease-out 250ms backwards; }
+
+/* ---------- login: botão "Entrando…" com o progresso do pré-carregamento ---------- */
+button.loading {
+  cursor: progress;
+  opacity: 1;
+  background: linear-gradient(90deg, var(--accent) calc(var(--p, 0) * 100%), color-mix(in srgb, var(--accent) 45%, var(--surface)) 0);
+  transition: background 0.3s;
+}
+button.loading:disabled { cursor: progress; }

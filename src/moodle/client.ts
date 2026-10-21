@@ -180,6 +180,8 @@ export class MoodleClient {
   #inflight = new Map<string, Promise<unknown>>();
   #swr: boolean;
   onUpdate?: (wsfunction: string) => void;
+  /** Avisa quando uma chamada à rede começa e termina (usado na barra de progresso do login). */
+  onNetwork?: (phase: "start" | "end") => void;
 
   constructor(opts: ClientOptions) {
     this.baseUrl = opts.baseUrl.replace(/\/+$/, "");
@@ -233,10 +235,13 @@ export class MoodleClient {
   }
 
   async #fetch<T>(wsfunction: string, body: URLSearchParams, key: string, store: boolean, ttl: number): Promise<T> {
-    const p = this.#limited(() => this.#request<T>(wsfunction, body)).then((data) => {
-      if (store) this.#cache?.set(key, data, ttl);
-      return data;
-    });
+    this.onNetwork?.("start");
+    const p = this.#limited(() => this.#request<T>(wsfunction, body))
+      .then((data) => {
+        if (store) this.#cache?.set(key, data, ttl);
+        return data;
+      })
+      .finally(() => this.onNetwork?.("end"));
     this.#inflight.set(key, p);
     try {
       return await p;
