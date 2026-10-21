@@ -312,7 +312,8 @@ footer::before { content: ""; display: block; border-top: 1px solid var(--corner
 
 /* ---------- gráfico de colunas ---------- */
 .colchart { --h: 160px; }
-.colchart .plot { position: relative; height: var(--h); margin-left: 28px; border-bottom: 1px solid var(--axis); }
+/* margin-top: espaço para o número acima da barra mais alta não invadir o texto de cima */
+.colchart .plot { position: relative; height: var(--h); margin: 20px 0 0 28px; border-bottom: 1px solid var(--axis); }
 .colchart .grid { position: absolute; left: 0; right: 0; border-top: 1px solid var(--grid); }
 .colchart .grid span { position: absolute; right: calc(100% + 6px); top: -8px; font-size: 0.7rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .colchart .ref { position: absolute; left: 0; right: 0; border-top: 1.5px dashed var(--text-2); opacity: 0.7; z-index: 1; pointer-events: none; }
@@ -331,7 +332,7 @@ footer::before { content: ""; display: block; border-top: 1px solid var(--corner
 .colchart .bar.current { background: var(--s-current); }
 .colchart .bar.below { background: var(--s-lost); }
 .colchart .bar.empty { height: 4px; background: var(--s-open); border-radius: 0; }
-.colchart .bar-val { position: absolute; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%); font-size: 0.7rem; color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.colchart .bar-val { position: absolute; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%); font-size: 0.7rem; line-height: 1.2; color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .colchart.no-axis .plot, .colchart.no-axis .xlabels { margin-left: 0; }
 .colchart .xlabels { display: flex; gap: 2px; margin-left: 28px; margin-top: 4px; }
 .colchart .xlabels div { flex: 1; text-align: center; font-size: 0.7rem; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: clip; white-space: nowrap; }
