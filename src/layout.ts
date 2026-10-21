@@ -2,10 +2,10 @@
 
 import { MoodleError } from "./moodle/client";
 import type { SiteInfo } from "./moodle/api";
-import { state } from "./state";
+import { demo, state } from "./state";
 import { themeButton } from "./theme";
 import { brandMark, h, icon, skeleton, type Child } from "./ui";
-import { logout, showTokenScreen } from "./views/login";
+import { exitDemo, logout, showTokenScreen } from "./views/login";
 
 const app = document.getElementById("app")!;
 
@@ -66,6 +66,14 @@ export function shell(...content: (Child | Child[])[]) {
       h(
         "div",
         { class: "content" },
+        demo &&
+          h(
+            "div",
+            { class: "demo-bar", role: "status" },
+            h("strong", {}, "Demonstração"),
+            h("span", {}, "Conta e dados fictícios, para apresentar o sistema. Nada aqui vem do AVA."),
+            h("button", { type: "button", class: "link", onclick: exitDemo }, "Sair da demonstração"),
+          ),
         h("main", {}, ...content),
         h("footer", {}, "As notas vêm do AVA (Moodle) e podem não ser as notas oficiais do sistema acadêmico. Somente leitura, exceto ao fazer questionários e enviar tarefas."),
       ),

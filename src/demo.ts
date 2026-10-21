@@ -1,5 +1,5 @@
-// Modo demonstração (só em `npm run dev`, com ?demo na URL): responde às chamadas do Moodle
-// com dados fictícios, sem tocar na rede. Útil para mexer no visual sem token.
+// Modo demonstração (?demo na URL, ou "Ver demonstração" no login): responde às chamadas do Moodle
+// com dados fictícios, sem tocar no AVA. Serve para apresentar o sistema e para mexer no visual sem token.
 
 import { quizFunctions, quizRespond } from "./demo-quiz";
 import { assignFunctions, assignRespond, demoUpload } from "./demo-assign";

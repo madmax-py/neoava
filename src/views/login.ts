@@ -1,6 +1,6 @@
 import { MoodleError, requestToken } from "../moodle/client";
 import { saveToken } from "../browser-cache";
-import { cache, setup, state } from "../state";
+import { cache, demo, setup, state } from "../state";
 import { brandMark, h } from "../ui";
 
 const app = document.getElementById("app")!;
@@ -15,6 +15,8 @@ function useToken(t: string) {
 }
 
 export function logout() {
+  // Na demonstração, "Sair" só fecha a demo: o login real (se houver) continua salvo.
+  if (demo) return exitDemo();
   if (!confirm("Sair? O token salvo neste navegador e o cache serão apagados.")) return;
   saveToken(null);
   cache.clear();
@@ -72,6 +74,12 @@ export function showTokenScreen(error?: MoodleError) {
         ),
         loginMsg,
         h(
+          "div",
+          { class: "demo-entry" },
+          h("button", { type: "button", class: "ghost", onclick: openDemo }, "Ver demonstração"),
+          h("span", { class: "muted small" }, "Conta fictícia com dados de exemplo. Não acessa o AVA."),
+        ),
+        h(
           "p",
           { class: "muted small" },
           "A senha vai direto para o AVA (",
@@ -109,4 +117,13 @@ export function showTokenScreen(error?: MoodleError) {
     ),
   );
   user.focus();
+}
+
+/** Abre a demonstração (conta fictícia), sem mexer no login real. */
+export function openDemo() {
+  location.href = `${location.pathname}?demo#/`;
+}
+
+export function exitDemo() {
+  location.href = location.pathname;
 }

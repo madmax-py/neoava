@@ -104,8 +104,10 @@ Em **Prazos** há um botão que gera o link `.ics` do calendário do AVA para as
 ou no celular. O link é pessoal (equivale a uma senha de leitura do calendário), nunca vai para o
 cache e deixa de funcionar se você trocar a senha do AVA.
 
-Para mexer no visual sem token: `http://127.0.0.1:5173/?demo` usa dados fictícios
-(só existe em `npm run dev`; não entra no build e não acessa a rede).
+Demonstração: o botão "Ver demonstração" no login (ou `?demo` na URL) abre uma conta fictícia
+com dados de exemplo, para apresentar o sistema ou mexer no visual sem token. Não acessa o AVA;
+os dados ficam em `src/demo*.ts`, num arquivo à parte que só é baixado ao abrir a demonstração.
+"Sair da demonstração" volta ao login sem apagar o token real salvo no navegador.
 
 O navegador chama o Moodle direto (o servidor responde com `Access-Control-Allow-Origin: *`).
 
@@ -152,7 +154,7 @@ src/data.ts            busca/agregação de dados usada por várias telas
 src/layout.ts          barra lateral, carregamento, avatar
 src/question-html.ts  limpeza do HTML das questões e inventário dos campos
 src/views/             uma tela por arquivo
-src/demo.ts            dados fictícios do modo ?demo (só em dev)
+src/demo.ts            dados fictícios do modo ?demo (botão "Ver demonstração" no login)
 src/demo-quiz.ts       questionários do modo ?demo, com estado (iniciar/salvar/enviar)
 src/demo-assign.ts     tarefas do modo ?demo, com estado (upload/salvar/enviar/remover)
 src/main.ts            inicialização e roteamento

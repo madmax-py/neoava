@@ -24,8 +24,8 @@ import { historyPage } from "./views/history";
 import { profilePage } from "./views/profile";
 import { libraryPage } from "./views/library";
 
-// import.meta.env.DEV direto aqui para o build de produção não incluir o demo.
-if (import.meta.env.DEV && demo) (await import("./demo")).installDemo();
+// Import dinâmico: os dados fictícios ficam num arquivo à parte, baixado só ao abrir a demonstração.
+if (demo) (await import("./demo")).installDemo();
 installTooltip();
 
 /**

@@ -4,7 +4,8 @@ import { MoodleClient, MoodleError } from "./moodle/client";
 import { createApi, type Api, type SiteInfo } from "./moodle/api";
 import { LocalStorageCache } from "./browser-cache";
 
-export const demo = import.meta.env.DEV && new URLSearchParams(location.search).has("demo");
+/** Demonstração (?demo na URL): conta fictícia, sem tocar no AVA. Também em produção, pelo botão do login. */
+export const demo = new URLSearchParams(location.search).has("demo");
 export const cache = new LocalStorageCache(demo ? "ava-demo:" : undefined);
 
 export const state = {
