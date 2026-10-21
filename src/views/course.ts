@@ -146,7 +146,7 @@ export async function courseView(id: number, rid: number) {
               h(
                 "div",
                 { class: "event-body" },
-                h("div", { class: "event-title" }, a.name),
+                h("div", { class: "event-title" }, h("a", { href: `#/disciplina/${id}/tarefa/${a.id}`, class: "event-link" }, a.name, " →")),
                 a.intro && h("div", { class: "muted small clamp" }, stripHtml(a.intro)),
                 assignSlots.get(a.id),
               ),

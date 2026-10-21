@@ -1,8 +1,8 @@
 # NeoAVA
 
 Front-end pessoal para o AVA da UniEvangélica (Moodle), usando a API oficial de Web Services
-(o mesmo token do app móvel do Moodle). É **somente leitura**, com uma exceção: fazer
-questionários (iniciar, salvar e enviar tentativas), como o app oficial faz.
+(o mesmo token do app móvel do Moodle). É **somente leitura**, com duas exceções: fazer
+questionários e enviar tarefas (arquivos e texto online), como o app oficial faz.
 
 > As notas exibidas são as do AVA e podem não ser as notas oficiais do sistema acadêmico.
 
@@ -52,6 +52,17 @@ Telas (barra lateral no computador, barra inferior no celular):
 - **Disciplinas**: cartões do ciclo atual + disciplinas anteriores.
 - **Disciplina**: aproveitamento, pontos por VA, desempenho por atividade, notas, status de envio e
   feedback das tarefas, tentativas e notas dos questionários, conteúdo com o que já foi concluído.
+- **Tarefa** (clique no nome da tarefa na página da disciplina): prazo, envio atrasado/data de corte,
+  nota, enunciado e anexos, o seu envio e a avaliação do professor (comentário e arquivos).
+  - **Adicionar/Editar envio**: escolher ou arrastar arquivos e/ou escrever o texto online. Os limites
+    da tarefa (quantidade, tamanho, tipos, limite de palavras) são conferidos antes de enviar.
+  - **Salvar rascunho** grava no AVA sem entregar; **Enviar para avaliação** pede confirmação (e a
+    declaração de autoria, quando exigida). Tarefas sem rascunho entregam ao salvar, com confirmação.
+  - **Remover envio** (com confirmação) e **Iniciar tarefa** para tarefas com tempo limite.
+  - Como o Moodle grava: upload para a área de rascunho (`webservice/upload.php`) e
+    `mod_assign_save_submission` com o itemid dessa área, que **substitui** os arquivos do envio.
+    Por isso, ao editar, os arquivos mantidos são baixados e enviados de novo junto com os novos.
+  - Ao mudar um texto já enviado, a formatação anterior (negrito, listas…) vira texto simples.
 - **Prazos**, **Histórico** e **Perfil** (seus dados no AVA, somente leitura).
 - **Questionário** (clique no nome de um quiz na página da disciplina): nota, tentativas, prazo, tempo
   limite, regras de acesso (senha, rede, Safe Exam Browser…), tipos de questão e o botão
@@ -113,10 +124,12 @@ O navegador chama o Moodle direto (o servidor responde com `Access-Control-Allow
 - `.env`, `.cache/` e `dist/` estão no `.gitignore`. Nunca commitar credenciais.
 - O cliente (`src/moodle/client.ts`) só aceita funções da lista `READ_ONLY_FUNCTIONS` e bloqueia
   nomes com padrão de escrita (`*_view_*`, `save_*`, `submit_*`, `add_*`…).
-- A única escrita permitida é fazer questionário: as funções de `WRITE_FUNCTIONS`
+- A única escrita permitida é fazer questionário e enviar tarefa: as funções de `WRITE_FUNCTIONS`
   (`mod_quiz_start_attempt`, `mod_quiz_save_attempt`, `mod_quiz_process_attempt`,
-  `mod_quiz_view_attempt`), e só com `allowWrite`. Qualquer outra escrita continua bloqueada.
-  Iniciar e enviar pedem confirmação na interface.
+  `mod_quiz_view_attempt`, `core_files_get_unused_draft_itemid`, `mod_assign_start_submission`,
+  `mod_assign_save_submission`, `mod_assign_submit_for_grading`, `mod_assign_remove_submission`)
+  e o upload para a área de rascunho, sempre com `allowWrite`. Qualquer outra escrita continua
+  bloqueada. Os passos sem volta (iniciar, enviar, remover) pedem confirmação na interface.
 - No máximo 2 requisições simultâneas; requisições iguais em andamento são reaproveitadas.
 - Uso individual: cada pessoa usa o próprio token, guardado localmente. Nada é centralizado.
 
@@ -135,6 +148,7 @@ src/question-html.ts  limpeza do HTML das questões e inventário dos campos
 src/views/             uma tela por arquivo
 src/demo.ts            dados fictícios do modo ?demo (só em dev)
 src/demo-quiz.ts       questionários do modo ?demo, com estado (iniciar/salvar/enviar)
+src/demo-assign.ts     tarefas do modo ?demo, com estado (upload/salvar/enviar/remover)
 src/main.ts            inicialização e roteamento
 scripts/               CLI (site-info, resumo)
 ```

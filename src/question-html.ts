@@ -245,3 +245,6 @@ export function questionFields(html: string): QuestionField[] {
   }
   return out;
 }
+
+/** Outros textos do Moodle (enunciado de tarefa, comentário do professor, texto enviado): mesma limpeza. */
+export const renderMoodleHtml = (html: string) => renderQuestionHtml(html, false);

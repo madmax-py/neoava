@@ -1,7 +1,7 @@
 // Wrappers tipados das funções de consulta. Os tipos cobrem só os campos usados aqui;
 // o Moodle devolve mais coisas.
 
-import type { CallOptions, MoodleClient } from "./client";
+import { MoodleError, type CallOptions, type MoodleClient, type UploadFile } from "./client";
 import { cleanGradeHtml, stripHtml } from "../format";
 
 export interface SiteInfo {
@@ -72,6 +72,16 @@ export interface CalendarEvent {
   timestart: number;
 }
 
+export interface MoodleFile {
+  filename: string;
+  filepath?: string;
+  filesize?: number;
+  fileurl: string;
+  timemodified?: number;
+  mimetype?: string;
+  isexternalfile?: boolean;
+}
+
 export interface Assignment {
   id: number;
   cmid: number;
@@ -84,6 +94,20 @@ export interface Assignment {
   cutoffdate?: number;
   allowsubmissionsfromdate?: number;
   intro?: string;
+  introattachments?: MoodleFile[];
+  /** 1 = envio fica como rascunho até "Enviar para avaliação"; 0 = salvar já envia. */
+  submissiondrafts?: number;
+  /** 1 = sem envio pelo AVA (entrega presencial etc.). */
+  nosubmissions?: number;
+  requiresubmissionstatement?: number;
+  /** Texto da declaração de autoria (quando exigida). */
+  submissionstatement?: string;
+  teamsubmission?: number;
+  /** Tempo limite em segundos (Moodle 4+; 0 = sem). */
+  timelimit?: number;
+  maxattempts?: number;
+  /** Configuração dos tipos de envio: plugin "file"/"onlinetext", name "enabled"/"maxfilesubmissions"… */
+  configs?: { plugin: string; subtype: string; name: string; value: string }[];
 }
 
 export interface ActionEvent {
@@ -132,20 +156,56 @@ export interface CourseSection {
   modules: CourseModule[];
 }
 
+export interface SubmissionPlugin {
+  type: string;
+  name: string;
+  fileareas?: { area: string; files?: MoodleFile[] }[];
+  editorfields?: { name: string; description?: string; text: string; format?: number }[];
+}
+
+export interface Submission {
+  id: number;
+  /** new, draft, submitted, reopened */
+  status: string;
+  attemptnumber?: number;
+  timecreated?: number;
+  timemodified?: number;
+  /** Tarefa com tempo: quando o envio foi iniciado. */
+  timestarted?: number;
+  plugins?: SubmissionPlugin[];
+}
+
 export interface SubmissionStatus {
   lastattempt?: {
-    submission?: { status: string; timemodified?: number };
-    teamsubmission?: { status: string; timemodified?: number };
+    submission?: Submission;
+    teamsubmission?: Submission;
     gradingstatus?: string;
     graded?: boolean;
     extensionduedate?: number;
     submissionsenabled?: boolean;
+    locked?: boolean;
+    /** Pode criar/editar o envio agora. */
+    canedit?: boolean;
+    /** Pode clicar em "Enviar para avaliação" (há rascunho). */
+    cansubmit?: boolean;
+    timelimit?: number;
+    submissiongroupmemberswhoneedtosubmit?: number[];
   };
   feedback?: {
     gradefordisplay?: string;
     gradeddate?: number;
-    plugins?: { type: string; name: string; editorfields?: { name: string; text: string; format?: number }[] }[];
+    plugins?: SubmissionPlugin[];
   };
+  previousattempts?: { attemptnumber: number; submission?: Submission }[];
+  assignmentdata?: { attachments?: { intro?: MoodleFile[]; activity?: MoodleFile[] }; activity?: string };
+}
+
+/** Aviso que o Moodle devolve em vez de erro (save/submit de tarefa). */
+export interface MoodleWarning {
+  item?: string;
+  itemid?: number;
+  warningcode?: string;
+  message: string;
 }
 
 export interface Quiz {
@@ -273,6 +333,19 @@ export interface UserProfile {
 
 const MIN = 60;
 
+/**
+ * save/submit de tarefa não lançam erro: devolvem uma lista de avisos (ex.: "envio vazio", "fora do prazo").
+ * Aviso aqui significa que NADA foi gravado, então vira erro.
+ */
+const okOrThrow =
+  (fn: string) =>
+  <T>(r: T): T => {
+    const list = Array.isArray(r) ? (r as MoodleWarning[]) : ((r as { warnings?: MoodleWarning[] })?.warnings ?? []);
+    if (list.length) throw new MoodleError(list.map((w) => w.message).join(" "), list[0].warningcode ?? "warning", fn);
+    if (r && typeof r === "object" && "status" in r && (r as { status: unknown }).status === false) throw new MoodleError("O AVA recusou a operação.", "statusfalse", fn);
+    return r;
+  };
+
 /** Par nome → valor de um campo do formulário da questão, no formato que o Moodle espera. */
 export interface FormPair {
   name: string;
@@ -331,6 +404,54 @@ export function createApi(c: MoodleClient) {
 
     submissionStatus: (assignid: number, o?: CallOptions) =>
       c.call<SubmissionStatus>("mod_assign_get_submission_status", { assignid }, { ttlSeconds: 15 * MIN, ...o }),
+
+    // ---------- Escrita (enviar tarefa). Cada uma exige allowWrite; a tela confirma o envio para avaliação. ----------
+
+    /** Grava arquivos na área de rascunho. Nada é entregue até saveSubmission usar o itemid. */
+    uploadDraft: (files: UploadFile[], itemid = 0) => c.uploadDraft(files, itemid, { allowWrite: true }),
+
+    /** Área de rascunho vazia (para o texto online, ou para limpar todos os arquivos). */
+    newDraftArea: () =>
+      c.call<{ itemid: number }>("core_files_get_unused_draft_itemid", {}, { allowWrite: true }).then((r) => r.itemid),
+
+    /** Tarefa com tempo limite: inicia o envio (o tempo começa a correr). */
+    startSubmission: (assignid: number) =>
+      c.call<{ submissionid: number; warnings?: MoodleWarning[] }>("mod_assign_start_submission", { assignid }, { allowWrite: true }).then(okOrThrow("mod_assign_start_submission")),
+
+    /**
+     * Salva o envio. Os arquivos da área de rascunho `files` SUBSTITUEM os do envio (por isso os já enviados
+     * precisam ir junto). Se a tarefa não usa rascunho (submissiondrafts = 0), salvar já entrega.
+     */
+    saveSubmission: (assignmentid: number, data: { files?: number; text?: { html: string; itemid: number } }) =>
+      c
+        .call<MoodleWarning[] | { warnings?: MoodleWarning[] }>(
+          "mod_assign_save_submission",
+          {
+            assignmentid,
+            plugindata: {
+              files_filemanager: data.files,
+              onlinetext_editor: data.text ? { text: data.text.html, format: 1, itemid: data.text.itemid } : undefined,
+            },
+          },
+          { allowWrite: true },
+        )
+        .then(okOrThrow("mod_assign_save_submission")),
+
+    /** "Enviar para avaliação": tira o envio de rascunho. Depois disso só o professor reabre. */
+    submitForGrading: (assignmentid: number, acceptsubmissionstatement: boolean) =>
+      c
+        .call<MoodleWarning[] | { warnings?: MoodleWarning[] }>(
+          "mod_assign_submit_for_grading",
+          { assignmentid, acceptsubmissionstatement },
+          { allowWrite: true },
+        )
+        .then(okOrThrow("mod_assign_submit_for_grading")),
+
+    /** Apaga o conteúdo do envio (arquivos e texto). */
+    removeSubmission: (assignid: number, userid: number) =>
+      c
+        .call<{ status: boolean; warnings?: MoodleWarning[] }>("mod_assign_remove_submission", { assignid, userid }, { allowWrite: true })
+        .then(okOrThrow("mod_assign_remove_submission")),
 
     quizzes: (courseids: number[], o?: CallOptions) =>
       c

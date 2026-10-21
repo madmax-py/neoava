@@ -2,6 +2,7 @@
 // com dados fictícios, sem tocar na rede. Útil para mexer no visual sem token.
 
 import { quizFunctions, quizRespond } from "./demo-quiz";
+import { assignFunctions, assignRespond, demoUpload } from "./demo-assign";
 
 const now = Math.floor(Date.now() / 1000);
 const D = 86400;
@@ -114,20 +115,21 @@ const functions = [
   "core_enrol_get_users_courses",
   "gradereport_overview_get_course_grades",
   "gradereport_user_get_grade_items",
-  "mod_assign_get_assignments",
   "core_calendar_get_action_events_by_timesort",
   "core_course_get_contents",
-  "mod_assign_get_submission_status",
   "core_completion_get_activities_completion_status",
   "core_calendar_get_calendar_export_token",
   "core_user_get_users_by_field",
   "core_badges_get_user_badges",
   "core_calendar_get_calendar_events",
   ...quizFunctions,
+  ...assignFunctions,
 ].map((name) => ({ name, version: "demo" }));
 
 function respond(fn: string, p: URLSearchParams): unknown {
   if (fn.startsWith("mod_quiz_")) return quizRespond(fn, p, current.map((c) => c.id));
+  const assignResult = assignRespond(fn, p, events);
+  if (assignResult !== undefined) return assignResult;
   switch (fn) {
     case "core_webservice_get_site_info":
       return { sitename: "AVA (demonstração)", siteurl: "", userid: 1, release: "5.1.4 (Build: demo)", fullname: "MARIA DEMONSTRAÇÃO SILVA", username: "2024100123", userpictureurl: "https://avagrad.unievangelica.edu.br/theme/image.php/snap/core/1/u/f1", functions };
@@ -144,43 +146,11 @@ function respond(fn: string, p: URLSearchParams): unknown {
       return gradeItems(Number(p.get("courseid")));
     case "core_calendar_get_action_events_by_timesort":
       return { events };
-    case "mod_assign_get_assignments": {
-      const cid = Number(p.get("courseids[0]"));
-      return {
-        courses: [
-          {
-            id: cid,
-            assignments: events
-              .filter((e) => e.course.id === cid && e.modulename === "assign")
-              .map((e) => ({ id: e.id, cmid: e.id, course: cid, name: e.activityname, duedate: e.timesort, intro: "<p>Descrição da tarefa de exemplo.</p>" })),
-          },
-        ],
-      };
-    }
     case "core_course_get_contents":
       return [
         { id: 1, section: 0, name: "Geral", summary: "", modules: [{ id: 1, name: "Plano de ensino", modname: "resource", url: "#", contents: [] }, { id: 2, name: "Avisos", modname: "forum", url: "#" }] },
         { id: 2, section: 1, name: "Unidade 1", summary: "<p>Introdução</p>", modules: [{ id: 3, name: "Slides — aula 1", modname: "resource", url: "#" }, { id: 4, name: "Quiz 1", modname: "quiz", url: "#" }] },
       ];
-    case "mod_assign_get_submission_status": {
-      const id = Number(p.get("assignid"));
-      const ev = events.find((e) => e.id === id);
-      const submitted = id % 3 !== 0;
-      return {
-        lastattempt: {
-          submission: { status: submitted ? "submitted" : ev && ev.timesort > now ? "draft" : "new", timemodified: now - 3 * D },
-          gradingstatus: submitted && id % 2 ? "graded" : "notgraded",
-          submissionsenabled: true,
-        },
-        feedback:
-          submitted && id % 2
-            ? {
-                gradefordisplay: '1,70 / 2,00 <i class="icon fa fa-check text-success" title="Aprovado" aria-label="Aprovado"></i>',
-                plugins: [{ type: "comments", name: "Comentários", editorfields: [{ name: "comments", text: "<p>Bom trabalho! Faltou detalhar os <b>critérios de aceitação</b>.</p>" }] }],
-              }
-            : undefined,
-      };
-    }
     case "core_completion_get_activities_completion_status":
       return {
         statuses: [1, 2, 3, 4].map((cmid) => ({ cmid, modname: "resource", instance: cmid, state: cmid <= 2 ? 1 : 0, timecompleted: cmid <= 2 ? now - cmid * D : 0, hascompletion: true, uservisible: true })),
@@ -229,6 +199,10 @@ export function installDemo() {
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (url.includes("/webservice/upload.php") && init?.body instanceof FormData) {
+      await new Promise((r) => setTimeout(r, 300));
+      return new Response(JSON.stringify(demoUpload(init.body)), { headers: { "Content-Type": "application/json" } });
+    }
     if (!url.includes("/webservice/rest/server.php")) return realFetch(input, init);
     const p = new URLSearchParams(String(init?.body ?? ""));
     await new Promise((r) => setTimeout(r, 150 + Math.random() * 250));

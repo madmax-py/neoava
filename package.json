@@ -1,7 +1,7 @@
 {
   "name": "neoava",
   "version": "0.1.0",
-  "description": "Front-end pessoal para o AVA UniEvangélica via Web Services do Moodle (leitura + fazer questionários)",
+  "description": "Front-end pessoal para o AVA UniEvangélica via Web Services do Moodle (leitura + questionários e envio de tarefas)",
   "directories": {
     "doc": "docs"
   },

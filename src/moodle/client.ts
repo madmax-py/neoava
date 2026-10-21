@@ -35,15 +35,36 @@ export const READ_ONLY_FUNCTIONS = new Set([
 ]);
 
 /**
- * Únicas funções que gravam no AVA, e só com `allowWrite` (a tela pede confirmação para iniciar e enviar).
- * Tudo para fazer um questionário, como o app oficial: iniciar, salvar, mudar de página e enviar.
+ * Únicas funções que gravam no AVA, e só com `allowWrite` (a tela pede confirmação nos passos sem volta).
+ * São as que o app oficial usa para fazer questionário e enviar tarefa.
  */
 export const WRITE_FUNCTIONS = new Set([
+  // Questionário: iniciar, salvar, mudar de página e enviar.
   "mod_quiz_start_attempt",
   "mod_quiz_save_attempt",
   "mod_quiz_process_attempt",
   "mod_quiz_view_attempt",
+  // Tarefa: área de rascunho para o texto, iniciar (tarefa com tempo), salvar, enviar para avaliação, remover.
+  "core_files_get_unused_draft_itemid",
+  "mod_assign_start_submission",
+  "mod_assign_save_submission",
+  "mod_assign_submit_for_grading",
+  "mod_assign_remove_submission",
 ]);
+
+/** Arquivo gravado na área de rascunho do usuário (resposta do upload.php). */
+export interface DraftFile {
+  itemid: number;
+  filename: string;
+  filearea: string;
+  filesize?: number;
+}
+
+/** Arquivo para enviar: um File do navegador ou um Blob com nome. */
+export interface UploadFile {
+  name: string;
+  blob: Blob;
+}
 
 /** Padrões que indicam escrita/registro de ação. Bloqueados mesmo que alguém os adicione à lista acima. */
 const WRITE_PATTERN = /(_view_|_view$|save_|submit_|add_|_update_|_delete_|_create_|_set_|mark_|_start_|_process_)/;
@@ -81,6 +102,8 @@ export interface Cache {
  */
 export interface Transport {
   call(wsfunction: string, body: URLSearchParams): Promise<unknown>;
+  /** Grava arquivos na área de rascunho do usuário (webservice/upload.php). itemid 0 = área nova. */
+  upload(files: UploadFile[], itemid: number): Promise<DraftFile[]>;
   fileUrl(url: string): string;
   /** Para exibição (ex.: token mascarado). */
   describe(): string;
@@ -191,6 +214,17 @@ export class MoodleClient {
     }
   }
 
+  /**
+   * Envia arquivos para a área de rascunho (o primeiro passo de qualquer envio de arquivo no Moodle).
+   * Sozinho não entrega nada: o arquivo só vai para a atividade quando um save_* usa este itemid.
+   * Exige allowWrite, como as funções de escrita.
+   */
+  async uploadDraft(files: UploadFile[], itemid: number, opts: { allowWrite?: boolean } = {}): Promise<DraftFile[]> {
+    if (!opts.allowWrite) throw new MoodleError("Envio de arquivo bloqueado (somente leitura).", "blockedwrite", "upload");
+    if (!files.length) return [];
+    return this.#limited(() => this.#transport.upload(files, itemid));
+  }
+
   /** URL para abrir um arquivo devolvido pela API (pluginfile.php). */
   fileUrl(url: string): string {
     return this.#transport.fileUrl(url);
@@ -232,6 +266,23 @@ export function directTransport(baseUrl: string, token: string): Transport {
       if (u.origin !== new URL(base).origin) return u.toString();
       u.searchParams.set("token", token);
       return u.toString();
+    },
+    async upload(files, itemid) {
+      const form = new FormData();
+      form.set("token", token);
+      form.set("filearea", "draft");
+      form.set("itemid", String(itemid));
+      files.forEach((f, i) => form.append(`file_${i + 1}`, f.blob, f.name));
+      let res: Response;
+      try {
+        res = await fetch(`${base}/webservice/upload.php`, { method: "POST", body: form });
+      } catch (e) {
+        throw new MoodleError(`Falha de rede no envio do arquivo: ${(e as Error).message}`, "network", "upload");
+      }
+      if (!res.ok) throw new MoodleError(`HTTP ${res.status} no envio do arquivo`, `http${res.status}`, "upload");
+      const data = (await res.json()) as DraftFile[] | { error?: string; errorcode?: string };
+      if (!Array.isArray(data)) throw new MoodleError(data.error ?? "Falha no envio do arquivo.", data.errorcode ?? "unknown", "upload");
+      return data;
     },
     async call(wsfunction, params) {
       const body = new URLSearchParams(params);

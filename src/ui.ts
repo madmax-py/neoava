@@ -396,12 +396,15 @@ export interface ConfirmOptions {
   danger?: boolean;
   /** Mostra um campo de senha (quiz com senha). */
   password?: { label: string; error?: string };
+  /** Caixa que precisa ser marcada para confirmar (ex.: declaração de autoria). */
+  checkbox?: string;
 }
 
 /** Diálogo modal. Resolve com ok = false se cancelar (Esc, clique fora ou "Cancelar"). */
 export function confirmDialog(o: ConfirmOptions): Promise<{ ok: boolean; password?: string }> {
   return new Promise((resolve) => {
     const pass = o.password ? h("input", { type: "password", autocomplete: "off", placeholder: o.password.label, "aria-label": o.password.label }) : null;
+    const check = o.checkbox ? h("input", { type: "checkbox" }) : null;
     const dlg = h("dialog", { class: "dialog" });
     const done = (ok: boolean) => {
       dlg.close();
@@ -417,12 +420,14 @@ export function confirmDialog(o: ConfirmOptions): Promise<{ ok: boolean; passwor
           onsubmit: (e) => {
             e.preventDefault();
             if (pass && !pass.value) return pass.focus();
+            if (check && !check.checked) return check.focus();
             done(true);
           },
         },
         h("h2", {}, o.title),
         h("div", { class: "dialog-body" }, o.body),
         pass && h("div", { class: "dialog-field" }, o.password!.error && h("div", { class: "error" }, o.password!.error), pass),
+        check && h("label", { class: "dialog-check" }, check, h("span", {}, o.checkbox!)),
         h("div", { class: "dialog-actions" }, h("button", { type: "button", onclick: () => done(false) }, "Cancelar"), confirm),
       ),
     );
@@ -433,6 +438,6 @@ export function confirmDialog(o: ConfirmOptions): Promise<{ ok: boolean; passwor
     dlg.addEventListener("click", (e) => e.target === dlg && done(false));
     document.body.append(dlg);
     dlg.showModal();
-    (pass ?? confirm).focus();
+    (pass ?? check ?? confirm).focus();
   });
 }

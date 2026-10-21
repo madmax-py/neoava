@@ -859,3 +859,28 @@ a.button.primary-link { background: var(--accent); border-color: var(--accent); 
 .dialog-field { margin-top: 12px; display: grid; gap: 6px; }
 .dialog-field .error { margin: 0; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.dialog-check { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; font-size: 0.9rem; cursor: pointer; }
+.dialog-check input { margin-top: 3px; flex: none; }
+
+/* ---------- tarefa: envio de arquivos e texto ---------- */
+.file-list { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 8px; }
+.file-link { overflow-wrap: anywhere; }
+.file-row { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 10px; border: 1px solid var(--grid); border-radius: 8px; background: var(--surface); }
+.file-row .file-link { flex: 1; min-width: 0; }
+.file-row .icon-btn { flex: none; }
+.dropzone {
+  display: block; margin: 8px 0 4px; padding: 18px; text-align: center; cursor: pointer;
+  border: 2px dashed var(--axis); border-radius: 10px; background: var(--surface-2); color: var(--accent);
+}
+.dropzone:hover, .dropzone.over { border-color: var(--accent); background: var(--accent-wash); }
+.dropzone div { margin-top: 4px; }
+.assign-editor h3 { margin: 16px 0 6px; color: var(--text); }
+.assign-editor h3:first-child { margin-top: 0; }
+.assign-editor textarea {
+  width: 100%; font: inherit; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); resize: vertical;
+}
+.assign-editor textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.editor-foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+.bad-text { color: var(--bad-ink); font-weight: 600; }
+.submitted-text, .feedback-text { padding: 10px 12px; border-radius: 8px; background: var(--surface-2); margin: 8px 0; }
