@@ -129,6 +129,24 @@ describe("cache", () => {
     expect(await c.call("core_webservice_get_site_info")).toEqual({ n: 1 });
   });
 
+  it("enviar uma atividade vence o cache; salvar respostas no meio da tentativa não", async () => {
+    const { t, calls } = fakeTransport();
+    const c = client(t, { cache: new MemoryCache() });
+    const read = () => c.call("core_calendar_get_action_events_by_timesort");
+    const reads = () => calls.filter((x) => x.fn === "core_calendar_get_action_events_by_timesort").length;
+    await read();
+    await c.call("mod_quiz_save_attempt", { attemptid: 1 }, { allowWrite: true });
+    await c.call("mod_quiz_process_attempt", { attemptid: 1, finishattempt: false }, { allowWrite: true });
+    await read();
+    expect(reads()).toBe(1);
+    await c.call("mod_quiz_process_attempt", { attemptid: 1, finishattempt: true }, { allowWrite: true });
+    await read();
+    expect(reads()).toBe(2);
+    await c.call("mod_assign_submit_for_grading", { assignmentid: 1 }, { allowWrite: true });
+    await read();
+    expect(reads()).toBe(3);
+  });
+
   it("a chave do cache não leva o token", async () => {
     const cache = new MemoryCache();
     const set = vi.spyOn(cache, "set");

@@ -100,6 +100,8 @@ export interface Cache {
   get(key: string): CacheEntry | undefined;
   set(key: string, value: unknown, ttlSeconds: number): void;
   clear?(): void;
+  /** Marca tudo como vencido (o dado continua lá para ser mostrado enquanto a versão nova chega). */
+  expireAll?(): void;
 }
 
 /**
@@ -131,6 +133,16 @@ export interface ClientOptions {
    */
   staleWhileRevalidate?: boolean;
   onUpdate?: (wsfunction: string) => void;
+}
+
+/**
+ * Escritas que mudam o estado de uma atividade (envio, tentativa iniciada ou finalizada). Depois de uma
+ * delas, todo o cache vence: prazos, notas, status e tentativas são buscados de novo em todas as telas.
+ * Salvar respostas no meio da tentativa e a área de rascunho não contam.
+ */
+function changesActivity(wsfunction: string, params: Params): boolean {
+  if (wsfunction === "mod_quiz_process_attempt") return !!params.finishattempt;
+  return ["mod_quiz_start_attempt", "mod_assign_start_submission", "mod_assign_save_submission", "mod_assign_submit_for_grading", "mod_assign_remove_submission"].includes(wsfunction);
 }
 
 export interface CallOptions {
@@ -231,7 +243,9 @@ export class MoodleClient {
       const pending = this.#inflight.get(key);
       if (pending) return pending as Promise<T>;
     }
-    return this.#fetch<T>(wsfunction, body, key, useCache, ttl);
+    const data = await this.#fetch<T>(wsfunction, body, key, useCache, ttl);
+    if (!isReadOnly && changesActivity(wsfunction, params)) this.#cache?.expireAll?.();
+    return data;
   }
 
   async #fetch<T>(wsfunction: string, body: URLSearchParams, key: string, store: boolean, ttl: number): Promise<T> {
@@ -352,6 +366,10 @@ export class MemoryCache implements Cache {
   }
   clear() {
     this.#m.clear();
+  }
+  expireAll() {
+    const now = Date.now();
+    for (const e of this.#m.values()) e.exp = now;
   }
 }
 

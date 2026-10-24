@@ -76,6 +76,21 @@ export class BrowserCache implements Cache {
     }
   }
 
+  /** Marca todas as entradas como vencidas, sem apagar: aparecem na hora e a versão nova é buscada. */
+  expireAll() {
+    const now = Date.now();
+    for (const e of this.#mem.values()) e.exp = now;
+    try {
+      for (const k of Object.keys(this.#store)) {
+        if (!k.startsWith(this.prefix)) continue;
+        try {
+          const e = JSON.parse(this.#store.getItem(k) ?? "") as CacheEntry;
+          this.#store.setItem(k, JSON.stringify({ ...e, exp: now }));
+        } catch {}
+      }
+    } catch {}
+  }
+
   /** Remove entradas inválidas e velhas demais (ou todas as vencidas, com `aggressive`). */
   prune(aggressive = false) {
     try {

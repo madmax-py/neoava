@@ -57,4 +57,15 @@ describe("BrowserCache", () => {
     expect(c.get("x")).toBeUndefined();
     expect(localStorage.getItem("t:x")).toBeNull();
   });
+
+  it("expireAll vence tudo sem apagar (na memória e no storage)", () => {
+    const c = new BrowserCache("t:");
+    c.set("a", 1, 3600);
+    localStorage.setItem("t:b", JSON.stringify({ v: 2, exp: Date.now() + 3600_000 }));
+    c.expireAll();
+    expect(c.get("a")!.exp).toBeLessThanOrEqual(Date.now());
+    expect(c.get("a")!.v).toBe(1);
+    expect(new BrowserCache("t:").get("b")).toMatchObject({ v: 2 });
+    expect(new BrowserCache("t:").get("b")!.exp).toBeLessThanOrEqual(Date.now());
+  });
 });
