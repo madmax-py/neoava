@@ -112,10 +112,20 @@ function activityTitle(name: string, url: string | undefined) {
   return url ? h("a", { href: url, target: "_blank", rel: "noreferrer", class: "event-link", title: "Abrir no AVA" }, name, h("span", { class: "ext" }, " ↗")) : h("span", {}, name);
 }
 
+/** Telas deste app para cada tipo de atividade (pelo id da instância). */
+const LOCAL_ROUTE: Record<string, string> = { quiz: "questionario", assign: "tarefa" };
+
+/** Questionário e tarefa abrem na tela deste app; o resto abre no AVA. */
+function activityLink(name: string, mod: string | undefined, instance: number | undefined, courseid: number | undefined, url: string | undefined) {
+  const route = mod && LOCAL_ROUTE[mod];
+  if (route && instance && courseid) return h("a", { href: `#/disciplina/${courseid}/${route}/${instance}`, class: "event-link" }, name, " →");
+  return activityTitle(name, avaUrl(url, courseid));
+}
+
 export interface EventRowOptions {
   /** Mostra "Semana N" da disciplina. */
   week?: number | null;
-  /** O título abre a atividade no AVA em vez de a disciplina neste app. */
+  /** O título abre a atividade (questionário e tarefa neste app, o resto no AVA) em vez de a disciplina. */
   linkToAva?: boolean;
 }
 
@@ -130,7 +140,7 @@ export function eventRow(ev: ActionEvent, o: EventRowOptions = {}) {
     h(
       "div",
       { class: "event-body" },
-      h("div", { class: "event-title" }, modBadge(ev.modulename), o.linkToAva ? activityTitle(name, avaUrl(ev.url, ev.course?.id)) : h("span", {}, name)),
+      h("div", { class: "event-title" }, modBadge(ev.modulename), o.linkToAva ? activityLink(name, ev.modulename, ev.instance, ev.course?.id, ev.url) : h("span", {}, name)),
       ev.course &&
         (o.linkToAva
           ? h("span", { class: "event-course" }, ev.course.fullname)
@@ -289,7 +299,7 @@ export function closedRow(it: ClosedItem, o: EventRowOptions = {}) {
     h(
       "div",
       { class: "event-body" },
-      h("div", { class: "event-title" }, modBadge(e.modulename), o.linkToAva ? activityTitle(closedName(e), avaUrl(it.url, e.courseid)) : h("span", {}, closedName(e))),
+      h("div", { class: "event-title" }, modBadge(e.modulename), o.linkToAva ? activityLink(closedName(e), e.modulename, e.instance, e.courseid, it.url) : h("span", {}, closedName(e))),
       it.course &&
         (o.linkToAva
           ? h("span", { class: "event-course" }, courseName(it.course))
