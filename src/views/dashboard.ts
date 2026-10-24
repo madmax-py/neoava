@@ -1,7 +1,7 @@
 // Painel: o que fazer agora, o que já passou do prazo e onde estão as dificuldades.
 // O quadro de notas do AVA costuma estar incompleto, então o foco são as provas (nota lançada ou não).
 
-import { closedRow, cycleData, courseName, deadlineStrip, eventRow, isLate, recentClosed, weeksGrid, type ClosedItem, type CourseStats } from "../data";
+import { actionInstances, closedRow, cycleData, courseName, deadlineStrip, eventRow, isLate, recentClosed, weeksGrid, type ClosedItem, type CourseStats } from "../data";
 import { DAY, nowS, site, state } from "../state";
 import { difficultyOf, fmtNum, getPassMark, semesterOf, setPassMark, type Difficulty, type Exam } from "../grades";
 import { fmtDateTime, fmtRelative } from "../format";
@@ -24,7 +24,8 @@ export async function dashboard(id: number) {
 
   const late = d.events.filter(isLate);
   // Encerrados sem entrega que o calendário de ações já não mostra (sem repetir o que já está em `late`).
-  const lateKeys = new Set(late.map((e) => `${e.modulename}:${e.instance}`));
+  const instanceOf = actionInstances(d.assigns, d.quizzes);
+  const lateKeys = new Set(late.map((e) => `${e.modulename}:${instanceOf(e)}`));
   const closedLate = closed.filter((c) => ["missed", "late-open", "draft", "inprogress"].includes(c.status) && !lateKeys.has(`${c.event.modulename}:${c.event.instance}`));
   const upcoming = d.events.filter((e) => !isLate(e));
   const todo7 = upcoming.filter((e) => e.timesort - now <= 7 * DAY);

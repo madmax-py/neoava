@@ -125,8 +125,7 @@ function activityLink(name: string, local: string | undefined, url: string | und
 }
 
 /**
- * Link para a tela deste app de cada próximo prazo. O `instance` dos eventos de ação vem com o id do
- * módulo (o mesmo `id=` do link no AVA), não o da tarefa/questionário; então traduz pelas listas.
+ * Link para a tela deste app de cada próximo prazo (o id vem de `actionInstances`).
  * Custo: as 2 chamadas agregadas de tarefas e quizzes (com cache, as mesmas do ciclo).
  */
 export async function upcomingLinks(events: ActionEvent[]): Promise<Map<number, string>> {
@@ -137,14 +136,25 @@ export async function upcomingLinks(events: ActionEvent[]): Promise<Map<number, 
     events.some((e) => e.modulename === "assign") ? ifAvailable("mod_assign_get_assignments", () => api().assignments(ids, o), [] as Assignment[]) : [],
     events.some((e) => e.modulename === "quiz") ? ifAvailable("mod_quiz_get_quizzes_by_courses", () => api().quizzes(ids, o), [] as Quiz[]) : [],
   ]);
-  const byCm = new Map<string, number>([...assigns.map((a) => [`assign:${a.cmid}`, a.id] as const), ...quizzes.map((q) => [`quiz:${q.coursemodule}`, q.id] as const)]);
+  const instanceOf = actionInstances(assigns, quizzes);
   const links = new Map<number, string>();
   for (const ev of events) {
-    const cm = Number(ev.url && new URL(ev.url).searchParams.get("id"));
-    const href = localHref(ev.modulename, byCm.get(`${ev.modulename}:${cm}`), ev.course?.id);
+    const href = localHref(ev.modulename, instanceOf(ev), ev.course?.id);
     if (href) links.set(ev.id, href);
   }
   return links;
+}
+
+/**
+ * Id real da tarefa/questionário de um evento de ação. O `instance` desses eventos é o id do módulo
+ * (o `id=` do link no AVA), diferente do `instance` dos eventos do calendário, que já é o id real.
+ */
+export function actionInstances(assigns: Assignment[], quizzes: Quiz[]) {
+  const byCm = new Map<string, number>([...assigns.map((a) => [`assign:${a.cmid}`, a.id] as const), ...quizzes.map((q) => [`quiz:${q.coursemodule}`, q.id] as const)]);
+  return (ev: ActionEvent): number | undefined => {
+    const cm = Number(ev.url && new URL(ev.url).searchParams.get("id"));
+    return byCm.get(`${ev.modulename}:${cm}`);
+  };
 }
 
 export interface EventRowOptions {
