@@ -3,14 +3,14 @@
 import { MoodleError } from "../moodle/client";
 import type { ActionEvent } from "../moodle/api";
 import { api, site, state } from "../state";
-import { baseData, closedName, closedRow, courseWeek, dayLabel, deadlineStrip, eventRow, isLate, recentClosed } from "../data";
+import { baseData, closedName, closedRow, courseWeek, dayLabel, deadlineStrip, eventRow, isLate, recentClosed, upcomingLinks } from "../data";
 import { pageHead, shell } from "../layout";
 import { showTokenScreen } from "./login";
 import { card, h } from "../ui";
 
 export async function deadlinesPage(id: number) {
   const { events, current, courses } = await baseData();
-  const closed = await recentClosed(current, 7);
+  const [closed, links] = await Promise.all([recentClosed(current, 7), upcomingLinks(events)]);
   const missed = closed.filter((c) => c.status === "missed");
   const lateOpen = closed.filter((c) => c.status === "late-open" || c.status === "draft");
   const groups = new Map<string, ActionEvent[]>();
@@ -20,7 +20,7 @@ export async function deadlinesPage(id: number) {
   }
   if (id !== state.routeId) return; // o usuário já navegou para outra tela
   const startOf = new Map(courses.map((c) => [c.id, c]));
-  const row = (ev: ActionEvent) => eventRow(ev, { week: courseWeek(ev.timesort, startOf.get(ev.course?.id ?? 0)), linkToAva: true });
+  const row = (ev: ActionEvent) => eventRow(ev, { week: courseWeek(ev.timesort, startOf.get(ev.course?.id ?? 0)), linkToAva: true, localHref: links.get(ev.id) });
   shell(
     pageHead("Próximos 30 dias", "Prazos"),
     (missed.length > 0 || lateOpen.length > 0) &&

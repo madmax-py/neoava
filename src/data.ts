@@ -115,18 +115,45 @@ function activityTitle(name: string, url: string | undefined) {
 /** Telas deste app para cada tipo de atividade (pelo id da instância). */
 const LOCAL_ROUTE: Record<string, string> = { quiz: "questionario", assign: "tarefa" };
 
+const localHref = (mod: string | undefined, instance: number | undefined, courseid: number | undefined) =>
+  mod && LOCAL_ROUTE[mod] && instance && courseid ? `#/disciplina/${courseid}/${LOCAL_ROUTE[mod]}/${instance}` : undefined;
+
 /** Questionário e tarefa abrem na tela deste app; o resto abre no AVA. */
-function activityLink(name: string, mod: string | undefined, instance: number | undefined, courseid: number | undefined, url: string | undefined) {
-  const route = mod && LOCAL_ROUTE[mod];
-  if (route && instance && courseid) return h("a", { href: `#/disciplina/${courseid}/${route}/${instance}`, class: "event-link" }, name, " →");
+function activityLink(name: string, local: string | undefined, url: string | undefined, courseid: number | undefined) {
+  if (local) return h("a", { href: local, class: "event-link" }, name, " →");
   return activityTitle(name, avaUrl(url, courseid));
+}
+
+/**
+ * Link para a tela deste app de cada próximo prazo. O `instance` dos eventos de ação vem com o id do
+ * módulo (o mesmo `id=` do link no AVA), não o da tarefa/questionário; então traduz pelas listas.
+ * Custo: as 2 chamadas agregadas de tarefas e quizzes (com cache, as mesmas do ciclo).
+ */
+export async function upcomingLinks(events: ActionEvent[]): Promise<Map<number, string>> {
+  const o = opts();
+  const ids = [...new Set(events.filter((e) => e.modulename && LOCAL_ROUTE[e.modulename]).map((e) => e.course!.id))];
+  if (!ids.length) return new Map();
+  const [assigns, quizzes] = await Promise.all([
+    events.some((e) => e.modulename === "assign") ? ifAvailable("mod_assign_get_assignments", () => api().assignments(ids, o), [] as Assignment[]) : [],
+    events.some((e) => e.modulename === "quiz") ? ifAvailable("mod_quiz_get_quizzes_by_courses", () => api().quizzes(ids, o), [] as Quiz[]) : [],
+  ]);
+  const byCm = new Map<string, number>([...assigns.map((a) => [`assign:${a.cmid}`, a.id] as const), ...quizzes.map((q) => [`quiz:${q.coursemodule}`, q.id] as const)]);
+  const links = new Map<number, string>();
+  for (const ev of events) {
+    const cm = Number(ev.url && new URL(ev.url).searchParams.get("id"));
+    const href = localHref(ev.modulename, byCm.get(`${ev.modulename}:${cm}`), ev.course?.id);
+    if (href) links.set(ev.id, href);
+  }
+  return links;
 }
 
 export interface EventRowOptions {
   /** Mostra "Semana N" da disciplina. */
   week?: number | null;
-  /** O título abre a atividade (questionário e tarefa neste app, o resto no AVA) em vez de a disciplina. */
+  /** O título abre a atividade no AVA em vez de a disciplina neste app. */
   linkToAva?: boolean;
+  /** Com `linkToAva`: abre esta tela do app no lugar do AVA (ver `upcomingLinks`). */
+  localHref?: string;
 }
 
 export function eventRow(ev: ActionEvent, o: EventRowOptions = {}) {
@@ -140,7 +167,7 @@ export function eventRow(ev: ActionEvent, o: EventRowOptions = {}) {
     h(
       "div",
       { class: "event-body" },
-      h("div", { class: "event-title" }, modBadge(ev.modulename), o.linkToAva ? activityLink(name, ev.modulename, ev.instance, ev.course?.id, ev.url) : h("span", {}, name)),
+      h("div", { class: "event-title" }, modBadge(ev.modulename), o.linkToAva ? activityLink(name, o.localHref, ev.url, ev.course?.id) : h("span", {}, name)),
       ev.course &&
         (o.linkToAva
           ? h("span", { class: "event-course" }, ev.course.fullname)
@@ -299,7 +326,7 @@ export function closedRow(it: ClosedItem, o: EventRowOptions = {}) {
     h(
       "div",
       { class: "event-body" },
-      h("div", { class: "event-title" }, modBadge(e.modulename), o.linkToAva ? activityLink(closedName(e), e.modulename, e.instance, e.courseid, it.url) : h("span", {}, closedName(e))),
+      h("div", { class: "event-title" }, modBadge(e.modulename), o.linkToAva ? activityLink(closedName(e), localHref(e.modulename, e.instance, e.courseid), it.url, e.courseid) : h("span", {}, closedName(e))),
       it.course &&
         (o.linkToAva
           ? h("span", { class: "event-course" }, courseName(it.course))
