@@ -864,6 +864,7 @@ a.alert:hover { filter: brightness(0.98); }
 .lib-cycle { border-top: 1px solid var(--corner); padding: 10px 0 6px; }
 .lib-cycle summary { cursor: pointer; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .lib-cycle summary::marker { color: var(--muted); }
+.lib-download { margin-left: auto; padding: 4px 10px; font-size: 0.82rem; }
 .lib-cycle-title { font: 800 1.15rem/1.2 var(--f-display); text-transform: uppercase; color: var(--text); }
 .lib-cycle.current .lib-cycle-title { color: var(--accent); }
 .lib-kind h3 { margin: 14px 0 4px; }

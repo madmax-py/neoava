@@ -7,6 +7,7 @@ import type { CycleSummary } from "../grades";
 import { fmtDate } from "../format";
 import { pageHead, shell } from "../layout";
 import { card, h, modBadge } from "../ui";
+import { safeName, uniquePath, zip, type ZipEntry } from "../zip";
 
 const KINDS: MaterialKind[] = ["file", "link", "page"];
 
@@ -23,7 +24,7 @@ export async function libraryPage(courseId: number | null, id: number) {
   if (id !== state.routeId) return; // o usuário já navegou para outra tela
   if (!sel) return shell(pageHead("Biblioteca", "Materiais do ciclo"), h("p", { class: "empty" }, "Nenhuma disciplina no ciclo atual."));
 
-  const list = h("div", { class: "lib-cycles" }, cycleGroups(sel.materials, sel.cycles, sel.split));
+  const list = h("div", { class: "lib-cycles" }, cycleGroups(sel.materials, sel.cycles, sel.split, courseName(sel.course)));
   const filter = h(
     "div",
     { class: "lib-filter", role: "group", "aria-label": "Filtrar por tipo" },
@@ -89,7 +90,7 @@ function splitNote(split: CycleSplit, cycles: CycleSummary | null, materials: Ma
   return parts.join(" ") || "Materiais em ordem de publicação.";
 }
 
-function cycleGroups(materials: Material[], cycles: CycleSummary | null, split: CycleSplit) {
+function cycleGroups(materials: Material[], cycles: CycleSummary | null, split: CycleSplit, course: string) {
   const order: (number | null)[] = [1, 2, 3, 0, null];
   return order.map((n) => {
     const list = materials.filter((m) => m.cycle === n);
@@ -108,6 +109,7 @@ function cycleGroups(materials: Material[], cycles: CycleSummary | null, split: 
         current && h("span", { class: "chip grade" }, "em andamento"),
         range && h("span", { class: "muted small" }, range),
         h("span", { class: "count" }, String(list.length)),
+        downloadAllButton(list, `${course} - ${title}`),
       ),
       KINDS.map((k) => {
         const items = list.filter((m) => m.kind === k).sort((a, b) => (a.postedAt ?? Infinity) - (b.postedAt ?? Infinity) || a.section.section - b.section.section);
@@ -117,9 +119,67 @@ function cycleGroups(materials: Material[], cycles: CycleSummary | null, split: 
   });
 }
 
+function filesOf(mod: CourseModule) {
+  return mod.modname === "resource" || mod.modname === "folder" ? (mod.contents ?? []).filter((x) => x.type === "file") : [];
+}
+
+/** Baixa num ZIP todos os arquivos do grupo; arquivos de pasta ficam numa subpasta com o nome dela. */
+function downloadAllButton(list: Material[], zipName: string) {
+  const files = list.flatMap((m) =>
+    filesOf(m.module).map((f) => ({
+      ...f,
+      path: (m.module.modname === "folder" ? [m.module.name, ...(f.filepath ?? "").split("/"), f.filename] : [f.filename]).filter(Boolean).map(safeName).join("/"),
+    })),
+  );
+  if (!files.length) return null;
+  const label = `⬇ Baixar tudo (${files.length})`;
+  const status = h("span", { class: "muted small", role: "status" });
+  const btn = h(
+    "button",
+    {
+      type: "button",
+      class: "lib-download",
+      title: "Baixar todos os arquivos deste ciclo num ZIP",
+      onclick: async (e: Event) => {
+        e.preventDefault(); // sem isso o clique no <summary> abre/fecha o ciclo
+        if (btn.disabled) return;
+        btn.disabled = true;
+        status.textContent = "";
+        const used = new Set<string>();
+        const entries: ZipEntry[] = [];
+        const failed: string[] = [];
+        try {
+          for (const [i, f] of files.entries()) {
+            btn.textContent = `Baixando ${i + 1} de ${files.length}…`;
+            try {
+              const res = await fetch(state.client!.fileUrl(f.fileurl));
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              entries.push({ name: uniquePath(f.path, used), data: new Uint8Array(await res.arrayBuffer()), mtime: f.timemodified });
+            } catch {
+              failed.push(f.filename);
+            }
+          }
+          if (!entries.length) throw new Error("nenhum arquivo pôde ser baixado");
+          const url = URL.createObjectURL(zip(entries));
+          h("a", { href: url, download: `${safeName(zipName)}.zip` }).click();
+          setTimeout(() => URL.revokeObjectURL(url), 60_000);
+          if (failed.length) status.textContent = `Não foi possível baixar: ${failed.join(", ")}.`;
+        } catch (err) {
+          status.textContent = `Falha ao baixar: ${err instanceof Error ? err.message : err}.`;
+        } finally {
+          btn.textContent = label;
+          btn.disabled = false;
+        }
+      },
+    },
+    label,
+  );
+  return [btn, status];
+}
+
 function itemRow(m: Material) {
   const mod = m.module;
-  const files = (mod.contents ?? []).filter((x) => x.type === "file");
+  const files = filesOf(mod);
   return h(
     "li",
     {},
@@ -129,8 +189,7 @@ function itemRow(m: Material) {
       { class: "lib-main" },
       h("div", { class: "lib-title" }, modBadge(mod.modname), avaLink(mod)),
       h("span", { class: "event-course" }, m.section.name || `Seção ${m.section.section}`),
-      (mod.modname === "resource" || mod.modname === "folder") &&
-        files.length > 0 &&
+      files.length > 0 &&
         h(
           "div",
           { class: "lib-files" },

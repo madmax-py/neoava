@@ -128,6 +128,8 @@ export interface ActionEvent {
 export interface ModuleContent {
   type: string;
   filename: string;
+  /** Subpasta dentro de um recurso "pasta" ("/" na raiz). */
+  filepath?: string;
   fileurl: string;
   filesize?: number;
   timecreated?: number;
